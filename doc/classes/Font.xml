@@ -343,4 +343,9 @@
 			</description>
 		</method>
 	</methods>
+	<members>
+		<member name="fallbacks" type="Font[]" setter="set_fallbacks" getter="get_fallbacks" default="[]">
+			Array of fallback [Font]s to use as a substitute if a glyph is not found in this current [Font].
+		</member>
+	</members>
 </class>
