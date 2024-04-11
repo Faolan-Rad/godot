@@ -64,6 +64,8 @@ public:
 	TypedArray<RID> map_get_obstacles(RID p_map) const override { return TypedArray<RID>(); }
 	void map_force_update(RID p_map) override {}
 	RID region_create() override { return RID(); }
+	void region_set_enabled(RID p_region, bool p_enabled) override {}
+	bool region_get_enabled(RID p_region) const override { return false; }
 	void region_set_use_edge_connections(RID p_region, bool p_enabled) override {}
 	bool region_get_use_edge_connections(RID p_region) const override { return false; }
 	void region_set_enter_cost(RID p_region, real_t p_enter_cost) override {}
@@ -79,13 +81,17 @@ public:
 	uint32_t region_get_navigation_layers(RID p_region) const override { return 0; }
 	void region_set_transform(RID p_region, Transform3D p_transform) override {}
 	void region_set_navigation_mesh(RID p_region, Ref<NavigationMesh> p_navigation_mesh) override {}
+#ifndef DISABLE_DEPRECATED
 	void region_bake_navigation_mesh(Ref<NavigationMesh> p_navigation_mesh, Node *p_root_node) override {}
+#endif // DISABLE_DEPRECATED
 	int region_get_connections_count(RID p_region) const override { return 0; }
 	Vector3 region_get_connection_pathway_start(RID p_region, int p_connection_id) const override { return Vector3(); }
 	Vector3 region_get_connection_pathway_end(RID p_region, int p_connection_id) const override { return Vector3(); }
 	RID link_create() override { return RID(); }
 	void link_set_map(RID p_link, RID p_map) override {}
 	RID link_get_map(RID p_link) const override { return RID(); }
+	void link_set_enabled(RID p_link, bool p_enabled) override {}
+	bool link_get_enabled(RID p_link) const override { return false; }
 	void link_set_bidirectional(RID p_link, bool p_bidirectional) override {}
 	bool link_is_bidirectional(RID p_link) const override { return false; }
 	void link_set_navigation_layers(RID p_link, uint32_t p_navigation_layers) override {}
@@ -103,6 +109,8 @@ public:
 	RID agent_create() override { return RID(); }
 	void agent_set_map(RID p_agent, RID p_map) override {}
 	RID agent_get_map(RID p_agent) const override { return RID(); }
+	void agent_set_paused(RID p_agent, bool p_paused) override {}
+	bool agent_get_paused(RID p_agent) const override { return false; }
 	void agent_set_avoidance_enabled(RID p_agent, bool p_enabled) override {}
 	bool agent_get_avoidance_enabled(RID p_agent) const override { return false; }
 	void agent_set_use_3d_avoidance(RID p_agent, bool p_enabled) override {}
@@ -125,6 +133,8 @@ public:
 	RID obstacle_create() override { return RID(); }
 	void obstacle_set_map(RID p_obstacle, RID p_map) override {}
 	RID obstacle_get_map(RID p_obstacle) const override { return RID(); }
+	void obstacle_set_paused(RID p_obstacle, bool p_paused) override {}
+	bool obstacle_get_paused(RID p_obstacle) const override { return false; }
 	void obstacle_set_avoidance_enabled(RID p_obstacle, bool p_enabled) override {}
 	bool obstacle_get_avoidance_enabled(RID p_obstacle) const override { return false; }
 	void obstacle_set_use_3d_avoidance(RID p_obstacle, bool p_enabled) override {}

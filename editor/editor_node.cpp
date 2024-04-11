@@ -60,7 +60,9 @@
 #include "scene/gui/tab_container.h"
 #include "scene/main/window.h"
 #include "scene/property_utils.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/packed_scene.h"
+#include "scene/resources/portable_compressed_texture.h"
 #include "servers/display_server.h"
 #include "servers/navigation_server_3d.h"
 #include "servers/physics_server_2d.h"
@@ -320,7 +322,7 @@ void EditorNode::_update_scene_tabs() {
 		scene_tabs->set_current_tab(editor_data.get_edited_scene());
 	}
 
-	const Size2 add_button_size = Size2(0, scene_tabs->get_size().y);
+	const Size2 add_button_size = Size2(scene_tab_add->get_size().x, scene_tabs->get_size().y);
 	if (scene_tabs->get_offset_buttons_visible()) {
 		// Move the add button to a fixed position.
 		if (scene_tab_add->get_parent() == scene_tabs) {
@@ -343,7 +345,7 @@ void EditorNode::_update_scene_tabs() {
 		Rect2 last_tab = scene_tabs->get_tab_rect(scene_tabs->get_tab_count() - 1);
 		int hsep = scene_tabs->get_theme_constant(SNAME("h_separation"));
 		if (scene_tabs->is_layout_rtl()) {
-			scene_tab_add->set_rect(Rect2(Point2(last_tab.position.x - scene_tab_add->get_size().x - hsep, last_tab.position.y), add_button_size));
+			scene_tab_add->set_rect(Rect2(Point2(last_tab.position.x - add_button_size.x - hsep, last_tab.position.y), add_button_size));
 		} else {
 			scene_tab_add->set_rect(Rect2(Point2(last_tab.position.x + last_tab.size.width + hsep, last_tab.position.y), add_button_size));
 		}
@@ -983,7 +985,7 @@ void EditorNode::_fs_changed() {
 				} else { // Normal project export.
 					String config_error;
 					bool missing_templates;
-					if (!platform->can_export(export_preset, config_error, missing_templates)) {
+					if (!platform->can_export(export_preset, config_error, missing_templates, export_defer.debug)) {
 						ERR_PRINT(vformat("Cannot export project with preset \"%s\" due to configuration errors:\n%s", preset_name, config_error));
 						err = missing_templates ? ERR_FILE_NOT_FOUND : ERR_UNCONFIGURED;
 					} else {
@@ -1411,7 +1413,7 @@ void EditorNode::_dialog_display_load_error(String p_file, Error p_error) {
 				show_accept(vformat(TTR("Scene file '%s' appears to be invalid/corrupt."), p_file.get_file()), TTR("OK"));
 			} break;
 			case ERR_FILE_NOT_FOUND: {
-				show_accept(vformat(TTR("Missing file '%s' or one its dependencies."), p_file.get_file()), TTR("OK"));
+				show_accept(vformat(TTR("Missing file '%s' or one of its dependencies."), p_file.get_file()), TTR("OK"));
 			} break;
 			default: {
 				show_accept(vformat(TTR("Error while loading file '%s'."), p_file.get_file()), TTR("OK"));
@@ -1982,6 +1984,9 @@ void EditorNode::_dialog_action(String p_file) {
 
 				if (scene_idx != -1) {
 					_discard_changes();
+				} else {
+					// Update the path of the edited scene to ensure later do/undo action history matches.
+					editor_data.set_scene_path(editor_data.get_edited_scene(), p_file);
 				}
 			}
 
@@ -2775,6 +2780,11 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 		case FILE_QUIT:
 		case RUN_PROJECT_MANAGER:
 		case RELOAD_CURRENT_PROJECT: {
+			if (p_confirmed && plugin_to_save) {
+				plugin_to_save->save_external_data();
+				p_confirmed = false;
+			}
+
 			if (!p_confirmed) {
 				bool save_each = EDITOR_GET("interface/editor/save_each_scene_on_quit");
 				if (_next_unsaved_scene(!save_each) == -1) {
@@ -2788,6 +2798,28 @@ void EditorNode::_menu_option_confirm(int p_option, bool p_confirmed) {
 						}
 						save_confirmation->reset_size();
 						save_confirmation->popup_centered();
+						break;
+					}
+
+					plugin_to_save = nullptr;
+					for (int i = 0; i < editor_data.get_editor_plugin_count(); i++) {
+						const String unsaved_status = editor_data.get_editor_plugin(i)->get_unsaved_status();
+						if (!unsaved_status.is_empty()) {
+							if (p_option == RELOAD_CURRENT_PROJECT) {
+								save_confirmation->set_ok_button_text(TTR("Save & Reload"));
+								save_confirmation->set_text(unsaved_status);
+							} else {
+								save_confirmation->set_ok_button_text(TTR("Save & Quit"));
+								save_confirmation->set_text(unsaved_status);
+							}
+							save_confirmation->reset_size();
+							save_confirmation->popup_centered();
+							plugin_to_save = editor_data.get_editor_plugin(i);
+							break;
+						}
+					}
+
+					if (plugin_to_save) {
 						break;
 					}
 
@@ -3029,13 +3061,21 @@ int EditorNode::_next_unsaved_scene(bool p_valid_filename, int p_start) {
 		if (!editor_data.get_edited_scene_root(i)) {
 			continue;
 		}
+
+		String scene_filename = editor_data.get_edited_scene_root(i)->get_scene_file_path();
+		if (p_valid_filename && scene_filename.is_empty()) {
+			continue;
+		}
+
 		bool unsaved = EditorUndoRedoManager::get_singleton()->is_history_unsaved(editor_data.get_scene_history_id(i));
 		if (unsaved) {
-			String scene_filename = editor_data.get_edited_scene_root(i)->get_scene_file_path();
-			if (p_valid_filename && scene_filename.is_empty()) {
-				continue;
-			}
 			return i;
+		} else {
+			for (int j = 0; j < editor_data.get_editor_plugin_count(); j++) {
+				if (!editor_data.get_editor_plugin(j)->get_unsaved_status(scene_filename).is_empty()) {
+					return i;
+				}
+			}
 		}
 	}
 	return -1;
@@ -3190,7 +3230,7 @@ void EditorNode::add_editor_plugin(EditorPlugin *p_editor, bool p_config_changed
 		if (icon.is_valid()) {
 			tb->set_icon(icon);
 			// Make sure the control is updated if the icon is reimported.
-			icon->connect("changed", callable_mp((Control *)tb, &Control::update_minimum_size));
+			icon->connect_changed(callable_mp((Control *)tb, &Control::update_minimum_size));
 		} else if (singleton->gui_base->has_theme_icon(p_editor->get_name(), SNAME("EditorIcons"))) {
 			tb->set_icon(singleton->gui_base->get_theme_icon(p_editor->get_name(), SNAME("EditorIcons")));
 		}
@@ -3326,6 +3366,11 @@ void EditorNode::set_addon_plugin_enabled(const String &p_addon, bool p_enabled,
 		return;
 	}
 
+	String plugin_version;
+	if (cf->has_section_key("plugin", "version")) {
+		plugin_version = cf->get_value("plugin", "version");
+	}
+
 	if (!cf->has_section_key("plugin", "script")) {
 		show_warning(vformat(TTR("Unable to find script field for addon plugin at: '%s'."), addon_path));
 		return;
@@ -3371,6 +3416,7 @@ void EditorNode::set_addon_plugin_enabled(const String &p_addon, bool p_enabled,
 
 	EditorPlugin *ep = memnew(EditorPlugin);
 	ep->set_script(scr);
+	ep->set_plugin_version(plugin_version);
 	addon_name_to_plugin[addon_path] = ep;
 	add_editor_plugin(ep, p_config_changed);
 
@@ -3408,6 +3454,7 @@ void EditorNode::_remove_edited_scene(bool p_change_tab) {
 
 void EditorNode::_remove_scene(int index, bool p_change_tab) {
 	// Clear icon cache in case some scripts are no longer needed.
+	// FIXME: Perfectly the cache should never be cleared and only updated on per-script basis, when an icon changes.
 	editor_data.clear_script_icon_cache();
 
 	if (editor_data.get_edited_scene() == index) {
@@ -3573,7 +3620,9 @@ void EditorNode::set_current_scene(int p_idx) {
 	_update_title();
 	_update_scene_tabs();
 
-	call_deferred(SNAME("_set_main_scene_state"), state, get_edited_scene()); // Do after everything else is done setting up.
+	if (tabs_to_close.is_empty()) {
+		call_deferred(SNAME("_set_main_scene_state"), state, get_edited_scene()); // Do after everything else is done setting up.
+	}
 }
 
 void EditorNode::setup_color_picker(ColorPicker *p_picker) {
@@ -4233,7 +4282,7 @@ void EditorNode::_pick_main_scene_custom_action(const String &p_custom_action_na
 	}
 }
 
-Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, const Ref<Script> &p_script, const String &p_fallback) {
+Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, const Ref<Script> &p_script, const String &p_fallback, bool p_fallback_script_to_theme) {
 	ERR_FAIL_COND_V_MSG(p_class.is_empty(), nullptr, "Class name cannot be empty.");
 	EditorData &ed = EditorNode::get_editor_data();
 
@@ -4244,21 +4293,14 @@ Ref<Texture2D> EditorNode::_get_class_or_script_icon(const String &p_class, cons
 			return script_icon;
 		}
 
-		// No custom icon was found in the inheritance chain, so check the base
-		// class of the script instead.
-		String base_type;
-		p_script->get_language()->get_global_class_name(p_script->get_path(), &base_type);
-
-		// Check if the base type is an extension-defined type.
-		Ref<Texture2D> ext_icon = ed.extension_class_get_icon(base_type);
-		if (ext_icon.is_valid()) {
-			return ext_icon;
-		}
-
-		// Look for the base type in the editor theme.
-		// This is only relevant for built-in classes.
-		if (gui_base && gui_base->has_theme_icon(base_type, "EditorIcons")) {
-			return gui_base->get_theme_icon(base_type, "EditorIcons");
+		if (p_fallback_script_to_theme) {
+			// Look for the base type in the editor theme.
+			// This is only relevant for built-in classes.
+			String base_type;
+			p_script->get_language()->get_global_class_name(p_script->get_path(), &base_type);
+			if (gui_base && gui_base->has_theme_icon(base_type, SNAME("EditorIcons"))) {
+				return gui_base->get_theme_icon(base_type, SNAME("EditorIcons"));
+			}
 		}
 	}
 
@@ -4312,7 +4354,7 @@ Ref<Texture2D> EditorNode::get_class_icon(const String &p_class, const String &p
 		scr = EditorNode::get_editor_data().script_class_load_script(p_class);
 	}
 
-	return _get_class_or_script_icon(p_class, scr, p_fallback);
+	return _get_class_or_script_icon(p_class, scr, p_fallback, true);
 }
 
 bool EditorNode::is_object_of_custom_type(const Object *p_object, const StringName &p_class) {
@@ -4392,6 +4434,9 @@ String EditorNode::_get_system_info() const {
 		godot_version += " " + hash;
 	}
 
+#ifdef LINUXBSD_ENABLED
+	const String display_server = OS::get_singleton()->get_environment("XDG_SESSION_TYPE").capitalize().replace(" ", ""); // `replace` is necessary, because `capitalize` introduces a whitespace between "x" and "11".
+#endif // LINUXBSD_ENABLED
 	String driver_name = GLOBAL_GET("rendering/rendering_device/driver");
 	String rendering_method = GLOBAL_GET("rendering/renderer/rendering_method");
 
@@ -4423,17 +4468,18 @@ String EditorNode::_get_system_info() const {
 	const int processor_count = OS::get_singleton()->get_processor_count();
 
 	// Prettify
-	if (driver_name == "vulkan") {
-		driver_name = "Vulkan";
-	} else if (driver_name == "opengl3") {
-		driver_name = "GLES3";
-	}
 	if (rendering_method == "forward_plus") {
 		rendering_method = "Forward+";
 	} else if (rendering_method == "mobile") {
 		rendering_method = "Mobile";
 	} else if (rendering_method == "gl_compatibility") {
 		rendering_method = "Compatibility";
+		driver_name = GLOBAL_GET("rendering/gl_compatibility/driver");
+	}
+	if (driver_name == "vulkan") {
+		driver_name = "Vulkan";
+	} else if (driver_name == "opengl3") {
+		driver_name = "GLES3";
 	}
 
 	// Join info.
@@ -4444,6 +4490,11 @@ String EditorNode::_get_system_info() const {
 	} else {
 		info.push_back(distribution_name);
 	}
+#ifdef LINUXBSD_ENABLED
+	if (!display_server.is_empty()) {
+		info.push_back(display_server);
+	}
+#endif // LINUXBSD_ENABLED
 	info.push_back(vformat("%s (%s)", driver_name, rendering_method));
 
 	String graphics;
@@ -4939,10 +4990,7 @@ void EditorNode::_save_open_scenes_to_config(Ref<ConfigFile> p_layout) {
 	p_layout->set_value(EDITOR_NODE_CONFIG_SECTION, "open_scenes", scenes);
 
 	String currently_edited_scene_path = editor_data.get_scene_path(editor_data.get_edited_scene());
-	// Don't save a bad path to the config.
-	if (!currently_edited_scene_path.is_empty()) {
-		p_layout->set_value(EDITOR_NODE_CONFIG_SECTION, "current_scene", currently_edited_scene_path);
-	}
+	p_layout->set_value(EDITOR_NODE_CONFIG_SECTION, "current_scene", currently_edited_scene_path);
 }
 
 void EditorNode::save_editor_layout_delayed() {
@@ -5263,6 +5311,8 @@ void EditorNode::_save_central_editor_layout_to_config(Ref<ConfigFile> p_config_
 	}
 	if (selected_bottom_panel_item_idx != -1) {
 		p_config_file->set_value(EDITOR_NODE_CONFIG_SECTION, "selected_bottom_panel_item", selected_bottom_panel_item_idx);
+	} else {
+		p_config_file->set_value(EDITOR_NODE_CONFIG_SECTION, "selected_bottom_panel_item", Variant());
 	}
 
 	// Debugger tab.
@@ -5281,21 +5331,34 @@ void EditorNode::_save_central_editor_layout_to_config(Ref<ConfigFile> p_config_
 	}
 	if (selected_main_editor_idx != -1) {
 		p_config_file->set_value(EDITOR_NODE_CONFIG_SECTION, "selected_main_editor_idx", selected_main_editor_idx);
+	} else {
+		p_config_file->set_value(EDITOR_NODE_CONFIG_SECTION, "selected_main_editor_idx", Variant());
 	}
 }
 
 void EditorNode::_load_central_editor_layout_from_config(Ref<ConfigFile> p_config_file) {
 	// Bottom panel.
 
-	if (p_config_file->has_section_key(EDITOR_NODE_CONFIG_SECTION, "center_split_offset")) {
-		int center_split_offset = p_config_file->get_value(EDITOR_NODE_CONFIG_SECTION, "center_split_offset");
-		center_split->set_split_offset(center_split_offset);
-	}
-
+	bool has_active_tab = false;
 	if (p_config_file->has_section_key(EDITOR_NODE_CONFIG_SECTION, "selected_bottom_panel_item")) {
 		int selected_bottom_panel_item_idx = p_config_file->get_value(EDITOR_NODE_CONFIG_SECTION, "selected_bottom_panel_item");
 		if (selected_bottom_panel_item_idx >= 0 && selected_bottom_panel_item_idx < bottom_panel_items.size()) {
-			_bottom_panel_switch(true, selected_bottom_panel_item_idx);
+			// Make sure we don't try to open contextual editors which are not enabled in the current context.
+			if (bottom_panel_items[selected_bottom_panel_item_idx].button->is_visible()) {
+				_bottom_panel_switch(true, selected_bottom_panel_item_idx);
+				has_active_tab = true;
+			}
+		}
+	}
+
+	if (p_config_file->has_section_key(EDITOR_NODE_CONFIG_SECTION, "center_split_offset")) {
+		int center_split_offset = p_config_file->get_value(EDITOR_NODE_CONFIG_SECTION, "center_split_offset");
+		center_split->set_split_offset(center_split_offset);
+
+		// If there is no active tab we need to collapse the panel.
+		if (!has_active_tab) {
+			bottom_panel_items[0].control->show(); // _bottom_panel_switch() can collapse only visible tabs.
+			_bottom_panel_switch(false, 0);
 		}
 	}
 
@@ -5336,7 +5399,9 @@ void EditorNode::_load_open_scenes_from_config(Ref<ConfigFile> p_layout) {
 	if (p_layout->has_section_key(EDITOR_NODE_CONFIG_SECTION, "current_scene")) {
 		String current_scene = p_layout->get_value(EDITOR_NODE_CONFIG_SECTION, "current_scene");
 		int current_scene_idx = scenes.find(current_scene);
-		set_current_scene(current_scene_idx);
+		if (current_scene_idx >= 0) {
+			set_current_scene(current_scene_idx);
+		}
 	}
 
 	save_editor_layout_delayed();
@@ -5546,19 +5611,36 @@ void EditorNode::_scene_tab_closed(int p_tab, int p_option) {
 		return;
 	}
 
-	bool unsaved = EditorUndoRedoManager::get_singleton()->is_history_unsaved(editor_data.get_scene_history_id(p_tab));
-	if (unsaved) {
+	String scene_filename = scene->get_scene_file_path();
+	String unsaved_message;
+
+	if (EditorUndoRedoManager::get_singleton()->is_history_unsaved(editor_data.get_scene_history_id(p_tab))) {
+		if (scene_filename.is_empty()) {
+			unsaved_message = TTR("This scene was never saved.");
+		} else {
+			unsaved_message = vformat(TTR("Scene \"%s\" has unsaved changes."), scene_filename);
+		}
+	} else {
+		// Check if any plugin has unsaved changes in that scene.
+		for (int i = 0; i < editor_data.get_editor_plugin_count(); i++) {
+			unsaved_message = editor_data.get_editor_plugin(i)->get_unsaved_status(scene_filename);
+			if (!unsaved_message.is_empty()) {
+				break;
+			}
+		}
+	}
+
+	if (!unsaved_message.is_empty()) {
 		if (get_current_tab() != p_tab) {
 			set_current_scene(p_tab);
 		}
 
-		String scene_filename = scene->get_scene_file_path();
 		if (current_menu_option == RELOAD_CURRENT_PROJECT) {
 			save_confirmation->set_ok_button_text(TTR("Save & Reload"));
-			save_confirmation->set_text(vformat(TTR("Save changes to '%s' before reloading?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
+			save_confirmation->set_text(unsaved_message + "\n\n" + TTR("Save before reloading?"));
 		} else {
 			save_confirmation->set_ok_button_text(TTR("Save & Close"));
-			save_confirmation->set_text(vformat(TTR("Save changes to '%s' before closing?"), !scene_filename.is_empty() ? scene_filename : "unsaved scene"));
+			save_confirmation->set_text(unsaved_message + "\n\n" + TTR("Save before closing?"));
 		}
 		save_confirmation->reset_size();
 		save_confirmation->popup_centered();
@@ -5598,11 +5680,17 @@ void EditorNode::_scene_tab_input(const Ref<InputEvent> &p_input) {
 			if (mb->get_button_index() == MouseButton::MIDDLE && mb->is_pressed()) {
 				_scene_tab_closed(scene_tabs->get_hovered_tab());
 			}
-		} else {
-			if (mb->get_button_index() == MouseButton::LEFT && mb->is_double_click()) {
+		} else if (mb->get_button_index() == MouseButton::LEFT && mb->is_double_click()) {
+			int tab_buttons = 0;
+			if (scene_tabs->get_offset_buttons_visible()) {
+				tab_buttons = theme->get_icon(SNAME("increment"), SNAME("TabBar"))->get_width() + theme->get_icon(SNAME("decrement"), SNAME("TabBar"))->get_width();
+			}
+
+			if ((gui_base->is_layout_rtl() && mb->get_position().x > tab_buttons) || (!gui_base->is_layout_rtl() && mb->get_position().x < scene_tabs->get_size().width - tab_buttons)) {
 				_menu_option_confirm(FILE_NEW_SCENE, true);
 			}
 		}
+
 		if (mb->get_button_index() == MouseButton::RIGHT && mb->is_pressed()) {
 			// Context menu.
 			scene_tabs_context_menu->clear();
@@ -6642,6 +6730,9 @@ void EditorNode::_print_handler(void *p_this, const String &p_string, bool p_err
 }
 
 void EditorNode::_print_handler_impl(const String &p_string, bool p_error, bool p_rich) {
+	if (!singleton) {
+		return;
+	}
 	if (p_error) {
 		singleton->log->add_message(p_string, EditorLog::MSG_TYPE_ERROR);
 	} else if (p_rich) {
@@ -6741,7 +6832,7 @@ EditorNode::EditorNode() {
 	// No scripting by default if in editor.
 	ScriptServer::set_scripting_enabled(false);
 
-	EditorHelp::generate_doc(); // Before any editor classes are created.
+	EditorHelp::generate_doc();
 	SceneState::set_disable_placeholders(true);
 	ResourceLoader::clear_translation_remaps(); // Using no remaps if in editor.
 	ResourceLoader::clear_path_remaps();
@@ -6757,6 +6848,7 @@ EditorNode::EditorNode() {
 		DisplayServer::get_singleton()->cursor_set_custom_image(Ref<Resource>());
 	}
 
+	DEV_ASSERT(!singleton);
 	singleton = this;
 
 	EditorUndoRedoManager::get_singleton()->connect("version_changed", callable_mp(this, &EditorNode::_update_undo_redo_allowed));
@@ -7128,7 +7220,7 @@ EditorNode::EditorNode() {
 	dock_select->set_v_size_flags(Control::SIZE_EXPAND_FILL);
 	dock_vb->add_child(dock_select);
 
-	if (!SceneTree::get_singleton()->get_root()->is_embedding_subwindows() && EDITOR_GET("interface/multi_window/enable")) {
+	if (!SceneTree::get_singleton()->get_root()->is_embedding_subwindows() && !EDITOR_GET("interface/editor/single_window_mode") && EDITOR_GET("interface/multi_window/enable")) {
 		dock_float = memnew(Button);
 		dock_float->set_icon(theme->get_icon("MakeFloating", "EditorIcons"));
 		dock_float->set_text(TTR("Make Floating"));
@@ -7756,6 +7848,7 @@ EditorNode::EditorNode() {
 
 	log = memnew(EditorLog);
 	Button *output_button = add_bottom_panel_item(TTR("Output"), log);
+	output_button->set_theme_type_variation("BottomPanelButton");
 	log->set_tool_button(output_button);
 
 	center_split->connect("resized", callable_mp(this, &EditorNode::_vp_resized));
@@ -8118,6 +8211,11 @@ EditorNode::~EditorNode() {
 	memdelete(progress_hb);
 
 	EditorSettings::destroy();
+
+	GDExtensionEditorPlugins::editor_node_add_plugin = nullptr;
+	GDExtensionEditorPlugins::editor_node_remove_plugin = nullptr;
+
+	singleton = nullptr;
 }
 
 /*

@@ -597,7 +597,8 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	// Completion
 	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "text_editor/completion/idle_parse_delay", 2.0, "0.1,10,0.01")
 	_initial_set("text_editor/completion/auto_brace_complete", true);
-	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "text_editor/completion/code_complete_delay", 0.3, "0.01,5,0.01")
+	_initial_set("text_editor/completion/code_complete_enabled", true);
+	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "text_editor/completion/code_complete_delay", 0.3, "0.01,5,0.01,or_greater")
 	_initial_set("text_editor/completion/put_callhint_tooltip_below_current_line", true);
 	_initial_set("text_editor/completion/complete_file_paths", true);
 	_initial_set("text_editor/completion/add_type_hints", false);
@@ -679,14 +680,15 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	_initial_set("editors/2d/grid_color", Color(1.0, 1.0, 1.0, 0.07));
 	_initial_set("editors/2d/guides_color", Color(0.6, 0.0, 0.8));
 	_initial_set("editors/2d/smart_snapping_line_color", Color(0.9, 0.1, 0.1));
-	_initial_set("editors/2d/bone_width", 5);
+	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "editors/2d/bone_width", 5.0, "0.01,20,0.01,or_greater")
 	_initial_set("editors/2d/bone_color1", Color(1.0, 1.0, 1.0, 0.7));
 	_initial_set("editors/2d/bone_color2", Color(0.6, 0.6, 0.6, 0.7));
 	_initial_set("editors/2d/bone_selected_color", Color(0.9, 0.45, 0.45, 0.7));
 	_initial_set("editors/2d/bone_ik_color", Color(0.9, 0.9, 0.45, 0.7));
 	_initial_set("editors/2d/bone_outline_color", Color(0.35, 0.35, 0.35, 0.5));
-	_initial_set("editors/2d/bone_outline_size", 2);
+	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "editors/2d/bone_outline_size", 2.0, "0.01,8,0.01,or_greater")
 	_initial_set("editors/2d/viewport_border_color", Color(0.4, 0.4, 1.0, 0.4));
+	_initial_set("editors/2d/use_integer_zoom_by_default", false);
 
 	// Panning
 	// Enum should be in sync with ControlScheme in ViewPanner.
@@ -707,7 +709,6 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 
 	// Animation
 	_initial_set("editors/animation/autorename_animation_tracks", true);
-	_initial_set("editors/animation/confirm_insert_track", true);
 	_initial_set("editors/animation/default_create_bezier_tracks", false);
 	_initial_set("editors/animation/default_create_reset_tracks", true);
 	_initial_set("editors/animation/onion_layers_past_color", Color(1, 0, 0));
@@ -757,8 +758,12 @@ void EditorSettings::_load_defaults(Ref<ConfigFile> p_extra_config) {
 	// SSL
 	EDITOR_SETTING_USAGE(Variant::STRING, PROPERTY_HINT_GLOBAL_FILE, "network/tls/editor_tls_certificates", _SYSTEM_CERTS_PATH, "*.crt,*.pem", PROPERTY_USAGE_DEFAULT | PROPERTY_USAGE_RESTART_IF_CHANGED);
 
-	// Profiler
+	// Debugger/profiler
+	EDITOR_SETTING(Variant::BOOL, PROPERTY_HINT_NONE, "debugger/auto_switch_to_remote_scene_tree", false, "")
 	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_RANGE, "debugger/profiler_frame_history_size", 3600, "60,10000,1")
+	EDITOR_SETTING(Variant::INT, PROPERTY_HINT_RANGE, "debugger/profiler_frame_max_functions", 64, "16,512,1")
+	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "debugger/remote_scene_tree_refresh_interval", 1.0, "0.1,10,0.01,or_greater")
+	EDITOR_SETTING(Variant::FLOAT, PROPERTY_HINT_RANGE, "debugger/remote_inspect_refresh_interval", 0.2, "0.02,10,0.01,or_greater")
 
 	// HTTP Proxy
 	_initial_set("network/http_proxy/host", "");
@@ -882,8 +887,6 @@ void EditorSettings::create() {
 		ERR_PRINT("Can't recreate EditorSettings as it already exists.");
 		return;
 	}
-
-	GDREGISTER_CLASS(EditorSettings); // Otherwise it can't be unserialized.
 
 	String config_file_path;
 	Ref<ConfigFile> extra_config = memnew(ConfigFile);

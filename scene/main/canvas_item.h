@@ -110,8 +110,8 @@ private:
 
 	ClipChildrenMode clip_children_mode = CLIP_CHILDREN_DISABLED;
 
-	RS::CanvasItemTextureFilter texture_filter_cache = RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR;
-	RS::CanvasItemTextureRepeat texture_repeat_cache = RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED;
+	mutable RS::CanvasItemTextureFilter texture_filter_cache = RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR;
+	mutable RS::CanvasItemTextureRepeat texture_repeat_cache = RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED;
 	TextureFilter texture_filter = TEXTURE_FILTER_PARENT_NODE;
 	TextureRepeat texture_repeat = TEXTURE_REPEAT_PARENT_NODE;
 
@@ -143,9 +143,9 @@ private:
 
 	static CanvasItem *current_item_drawn;
 	friend class Viewport;
-	void _refresh_texture_repeat_cache();
+	void _refresh_texture_repeat_cache() const;
 	void _update_texture_repeat_changed(bool p_propagate);
-	void _refresh_texture_filter_cache();
+	void _refresh_texture_filter_cache() const;
 	void _update_texture_filter_changed(bool p_propagate);
 
 	void _notify_transform_deferred();
@@ -170,6 +170,7 @@ protected:
 	_FORCE_INLINE_ void set_hide_clip_children(bool p_value) { hide_clip_children = p_value; }
 
 	GDVIRTUAL0(_draw)
+
 public:
 	enum {
 		NOTIFICATION_TRANSFORM_CHANGED = SceneTree::NOTIFICATION_TRANSFORM_CHANGED, //unique
@@ -179,7 +180,6 @@ public:
 		NOTIFICATION_EXIT_CANVAS = 33,
 		NOTIFICATION_LOCAL_TRANSFORM_CHANGED = 35,
 		NOTIFICATION_WORLD_2D_CHANGED = 36,
-
 	};
 
 	/* EDITOR */
@@ -189,7 +189,7 @@ public:
 
 	// Save and restore a CanvasItem state
 	virtual void _edit_set_state(const Dictionary &p_state) {}
-	virtual Dictionary _edit_get_state() const { return Dictionary(); };
+	virtual Dictionary _edit_get_state() const { return Dictionary(); }
 
 	// Used to move the node
 	virtual void _edit_set_position(const Point2 &p_position) = 0;
@@ -360,8 +360,8 @@ public:
 	virtual void set_texture_repeat(TextureRepeat p_texture_repeat);
 	TextureRepeat get_texture_repeat() const;
 
-	TextureFilter get_texture_filter_in_tree();
-	TextureRepeat get_texture_repeat_in_tree();
+	TextureFilter get_texture_filter_in_tree() const;
+	TextureRepeat get_texture_repeat_in_tree() const;
 
 	// Used by control nodes to retrieve the parent's anchorable area
 	virtual Rect2 get_anchorable_rect() const { return Rect2(0, 0, 0, 0); };

@@ -226,7 +226,7 @@ GDScriptFunction *GDScriptByteCodeGenerator::write_end() {
 
 	if (opcodes.size()) {
 		function->code = opcodes;
-		function->_code_ptr = &function->code[0];
+		function->_code_ptr = &function->code.write[0];
 		function->_code_size = opcodes.size();
 
 	} else {
@@ -577,6 +577,12 @@ void GDScriptByteCodeGenerator::write_unary_operator(const Address &p_target, Va
 	append(Address());
 	append(p_target);
 	append(p_operator);
+	append(0); // Signature storage.
+	append(0); // Return type storage.
+	constexpr int _pointer_size = sizeof(Variant::ValidatedOperatorEvaluator) / sizeof(*(opcodes.ptr()));
+	for (int i = 0; i < _pointer_size; i++) {
+		append(0); // Space for function pointer.
+	}
 }
 
 void GDScriptByteCodeGenerator::write_binary_operator(const Address &p_target, Variant::Operator p_operator, const Address &p_left_operand, const Address &p_right_operand) {
@@ -610,6 +616,12 @@ void GDScriptByteCodeGenerator::write_binary_operator(const Address &p_target, V
 	append(p_right_operand);
 	append(p_target);
 	append(p_operator);
+	append(0); // Signature storage.
+	append(0); // Return type storage.
+	constexpr int _pointer_size = sizeof(Variant::ValidatedOperatorEvaluator) / sizeof(*(opcodes.ptr()));
+	for (int i = 0; i < _pointer_size; i++) {
+		append(0); // Space for function pointer.
+	}
 }
 
 void GDScriptByteCodeGenerator::write_type_test(const Address &p_target, const Address &p_source, const GDScriptDataType &p_type) {
@@ -851,6 +863,20 @@ void GDScriptByteCodeGenerator::write_get_member(const Address &p_target, const 
 	append_opcode(GDScriptFunction::OPCODE_GET_MEMBER);
 	append(p_target);
 	append(p_name);
+}
+
+void GDScriptByteCodeGenerator::write_set_static_variable(const Address &p_value, const Address &p_class, int p_index) {
+	append_opcode(GDScriptFunction::OPCODE_SET_STATIC_VARIABLE);
+	append(p_value);
+	append(p_class);
+	append(p_index);
+}
+
+void GDScriptByteCodeGenerator::write_get_static_variable(const Address &p_target, const Address &p_class, int p_index) {
+	append_opcode(GDScriptFunction::OPCODE_GET_STATIC_VARIABLE);
+	append(p_target);
+	append(p_class);
+	append(p_index);
 }
 
 void GDScriptByteCodeGenerator::write_assign_with_conversion(const Address &p_target, const Address &p_source) {

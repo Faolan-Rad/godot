@@ -108,6 +108,7 @@ Error FileAccessUnix::open_internal(const String &p_path, int p_mode_flags) {
 			last_error = ERR_FILE_CANT_OPEN;
 			return last_error;
 		}
+		fchmod(fd, 0666);
 		path = String::utf8(cs.ptr());
 
 		f = fdopen(fd, mode_string);

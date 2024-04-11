@@ -70,9 +70,9 @@ static void _editor_init() {
 	if (blend_enabled) {
 		Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
 		if (blender3_path.is_empty()) {
-			WARN_PRINT("Blend file import is enabled in the project settings, but no Blender path is configured in the editor settings. Blend files will not be imported.");
+			WARN_PRINT(TTR("Blend file import is enabled in the project settings, but no Blender path is configured in the editor settings. Blend files will not be imported."));
 		} else if (!da->dir_exists(blender3_path)) {
-			WARN_PRINT("Blend file import is enabled, but the Blender path doesn't point to an accessible directory. Blend files will not be imported.");
+			WARN_PRINT(TTR("Blend file import is enabled, but the Blender path doesn't point to an accessible directory. Blend files will not be imported."));
 		} else {
 			Ref<EditorSceneFormatImporterBlend> importer;
 			importer.instantiate();
@@ -117,7 +117,6 @@ void initialize_gltf_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(GLTFAnimation);
 		GDREGISTER_CLASS(GLTFBufferView);
 		GDREGISTER_CLASS(GLTFCamera);
-		GDREGISTER_CLASS(GLTFCollider);
 		GDREGISTER_CLASS(GLTFDocument);
 		GDREGISTER_CLASS(GLTFDocumentExtension);
 		GDREGISTER_CLASS(GLTFDocumentExtensionConvertImporterMesh);
@@ -125,6 +124,7 @@ void initialize_gltf_module(ModuleInitializationLevel p_level) {
 		GDREGISTER_CLASS(GLTFMesh);
 		GDREGISTER_CLASS(GLTFNode);
 		GDREGISTER_CLASS(GLTFPhysicsBody);
+		GDREGISTER_CLASS(GLTFPhysicsShape);
 		GDREGISTER_CLASS(GLTFSkeleton);
 		GDREGISTER_CLASS(GLTFSkin);
 		GDREGISTER_CLASS(GLTFSpecGloss);

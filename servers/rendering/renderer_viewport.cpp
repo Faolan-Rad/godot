@@ -180,7 +180,19 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			// to compensate for the loss of sharpness.
 			const float texture_mipmap_bias = log2f(MIN(scaling_3d_scale, 1.0)) + p_viewport->texture_mipmap_bias;
 
-			p_viewport->render_buffers->configure(p_viewport->render_target, Size2i(render_width, render_height), Size2(width, height), scaling_3d_mode, p_viewport->fsr_sharpness, texture_mipmap_bias, p_viewport->msaa_3d, p_viewport->screen_space_aa, p_viewport->use_taa, p_viewport->use_debanding, p_viewport->view_count);
+			RenderSceneBuffersConfiguration rb_config;
+			rb_config.set_render_target(p_viewport->render_target);
+			rb_config.set_internal_size(Size2i(render_width, render_height));
+			rb_config.set_target_size(Size2(width, height));
+			rb_config.set_view_count(p_viewport->view_count);
+			rb_config.set_scaling_3d_mode(scaling_3d_mode);
+			rb_config.set_msaa_3d(p_viewport->msaa_3d);
+			rb_config.set_screen_space_aa(p_viewport->screen_space_aa);
+			rb_config.set_fsr_sharpness(p_viewport->fsr_sharpness);
+			rb_config.set_texture_mipmap_bias(texture_mipmap_bias);
+			rb_config.set_use_taa(p_viewport->use_taa);
+
+			p_viewport->render_buffers->configure(&rb_config);
 		}
 	}
 }
@@ -1403,7 +1415,7 @@ void RendererViewport::call_set_vsync_mode(DisplayServer::VSyncMode p_mode, Disp
 int RendererViewport::get_total_objects_drawn() const {
 	return total_objects_drawn;
 }
-int RendererViewport::get_total_vertices_drawn() const {
+int RendererViewport::get_total_primitives_drawn() const {
 	return total_vertices_drawn;
 }
 int RendererViewport::get_total_draw_calls_used() const {

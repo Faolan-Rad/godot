@@ -1260,6 +1260,7 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF_BASIC("application/config/name", "");
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::DICTIONARY, "application/config/name_localized", PROPERTY_HINT_LOCALIZABLE_STRING), Dictionary());
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::STRING, "application/config/description", PROPERTY_HINT_MULTILINE_TEXT), "");
+	GLOBAL_DEF_BASIC("application/config/version", "");
 	GLOBAL_DEF_INTERNAL(PropertyInfo(Variant::STRING, "application/config/tags"), PackedStringArray());
 	GLOBAL_DEF_BASIC(PropertyInfo(Variant::STRING, "application/run/main_scene", PROPERTY_HINT_FILE, "*.tscn,*.scn,*.res"), "");
 	GLOBAL_DEF("application/run/disable_stdout", false);
@@ -1344,7 +1345,7 @@ ProjectSettings::ProjectSettings() {
 	GLOBAL_DEF_RST(PropertyInfo(Variant::INT, "rendering/occlusion_culling/bvh_build_quality", PROPERTY_HINT_ENUM, "Low,Medium,High"), 2);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "memory/limits/multithreaded_server/rid_pool_prealloc", PROPERTY_HINT_RANGE, "0,500,1"), 60); // No negative and limit to 500 due to crashes.
 	GLOBAL_DEF_RST("internationalization/rendering/force_right_to_left_layout_direction", false);
-	GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "internationalization/rendering/root_node_layout_direction", PROPERTY_HINT_RANGE, "Based on Locale,Left-to-Right,Right-to-Left"), 0);
+	GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "internationalization/rendering/root_node_layout_direction", PROPERTY_HINT_ENUM, "Based on Locale,Left-to-Right,Right-to-Left"), 0);
 
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "gui/timers/incremental_search_max_interval_msec", PROPERTY_HINT_RANGE, "0,10000,1,or_greater"), 2000);
 

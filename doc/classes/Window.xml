@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<class name="Window" inherits="Viewport" version="4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+<class name="Window" inherits="Viewport" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
 	<brief_description>
 		Base class for all windows, dialogs, and popups.
 	</brief_description>
@@ -10,6 +10,12 @@
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="_get_contents_minimum_size" qualifiers="virtual const">
+			<return type="Vector2" />
+			<description>
+				Virtual method to be implemented by the user. Overrides the value returned by [method get_contents_minimum_size].
+			</description>
+		</method>
 		<method name="add_theme_color_override">
 			<return type="void" />
 			<param index="0" name="name" type="StringName" />
@@ -92,6 +98,7 @@
 			<return type="Vector2" />
 			<description>
 				Returns the combined minimum size from the child [Control] nodes of the window. Use [method child_controls_changed] to update it when children nodes have changed.
+				The value returned by this method can be overridden with [method _get_contents_minimum_size].
 			</description>
 		</method>
 		<method name="get_flag" qualifiers="const">
@@ -378,7 +385,8 @@
 			<return type="void" />
 			<param index="0" name="ratio" type="float" default="0.8" />
 			<description>
-				Popups the [Window] centered inside its parent [Window] and sets its size as a [param ratio] of parent's size.
+				If [Window] is embedded, popups the [Window] centered inside its embedder and sets its size as a [param ratio] of embedder's size.
+				If [Window] is a native window, popups the [Window] centered inside the screen of its parent [Window] and sets its size as a [param ratio] of the screen size.
 			</description>
 		</method>
 		<method name="popup_exclusive">
@@ -625,7 +633,6 @@
 		</member>
 		<member name="popup_window" type="bool" setter="set_flag" getter="get_flag" default="false">
 			If [code]true[/code], the [Window] will be considered a popup. Popups are sub-windows that don't show as separate windows in system's window manager's window list and will send close request when anything is clicked outside of them (unless [member exclusive] is enabled).
-			[b]Note:[/b] This property only works with native windows.
 		</member>
 		<member name="position" type="Vector2i" setter="set_position" getter="get_position" default="Vector2i(0, 0)">
 			The window's position in pixels.
@@ -718,12 +725,12 @@
 		</signal>
 		<signal name="mouse_entered">
 			<description>
-				Emitted when the mouse cursor enters the [Window]'s area, regardless if it's currently focused or not.
+				Emitted when the mouse cursor enters the [Window]'s visible area, that is not occluded behind other [Control]s or windows, provided its [member Viewport.gui_disable_input] is [code]false[/code] and regardless if it's currently focused or not.
 			</description>
 		</signal>
 		<signal name="mouse_exited">
 			<description>
-				Emitted when the mouse cursor exits the [Window]'s area (including when it's hovered over another window on top of this one).
+				Emitted when the mouse cursor leaves the [Window]'s visible area, that is not occluded behind other [Control]s or windows, provided its [member Viewport.gui_disable_input] is [code]false[/code] and regardless if it's currently focused or not.
 			</description>
 		</signal>
 		<signal name="theme_changed">
@@ -901,6 +908,9 @@
 		<theme_item name="embedded_border" data_type="style" type="StyleBox">
 			The background style used when the [Window] is embedded. Note that this is drawn only under the window's content, excluding the title. For proper borders and title bar style, you can use [code]expand_margin_*[/code] properties of [StyleBoxFlat].
 			[b]Note:[/b] The content background will not be visible unless [member transparent] is enabled.
+		</theme_item>
+		<theme_item name="embedded_unfocused_border" data_type="style" type="StyleBox">
+			The background style used when the [Window] is embedded and unfocused.
 		</theme_item>
 	</theme_items>
 </class>

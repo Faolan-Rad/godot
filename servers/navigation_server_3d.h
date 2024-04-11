@@ -117,6 +117,9 @@ public:
 	/// Creates a new region.
 	virtual RID region_create() = 0;
 
+	virtual void region_set_enabled(RID p_region, bool p_enabled) = 0;
+	virtual bool region_get_enabled(RID p_region) const = 0;
+
 	virtual void region_set_use_edge_connections(RID p_region, bool p_enabled) = 0;
 	virtual bool region_get_use_edge_connections(RID p_region) const = 0;
 
@@ -148,8 +151,10 @@ public:
 	/// Set the navigation mesh of this region.
 	virtual void region_set_navigation_mesh(RID p_region, Ref<NavigationMesh> p_navigation_mesh) = 0;
 
+#ifndef DISABLE_DEPRECATED
 	/// Bake the navigation mesh.
 	virtual void region_bake_navigation_mesh(Ref<NavigationMesh> p_navigation_mesh, Node *p_root_node) = 0;
+#endif // DISABLE_DEPRECATED
 
 	/// Get a list of a region's connection to other regions.
 	virtual int region_get_connections_count(RID p_region) const = 0;
@@ -162,6 +167,9 @@ public:
 	/// Set the map of this link.
 	virtual void link_set_map(RID p_link, RID p_map) = 0;
 	virtual RID link_get_map(RID p_link) const = 0;
+
+	virtual void link_set_enabled(RID p_link, bool p_enabled) = 0;
+	virtual bool link_get_enabled(RID p_link) const = 0;
 
 	/// Set whether this link travels in both directions.
 	virtual void link_set_bidirectional(RID p_link, bool p_bidirectional) = 0;
@@ -197,6 +205,9 @@ public:
 	/// Put the agent in the map.
 	virtual void agent_set_map(RID p_agent, RID p_map) = 0;
 	virtual RID agent_get_map(RID p_agent) const = 0;
+
+	virtual void agent_set_paused(RID p_agent, bool p_paused) = 0;
+	virtual bool agent_get_paused(RID p_agent) const = 0;
 
 	virtual void agent_set_avoidance_enabled(RID p_agent, bool p_enabled) = 0;
 	virtual bool agent_get_avoidance_enabled(RID p_agent) const = 0;
@@ -244,7 +255,7 @@ public:
 	virtual void agent_set_velocity_forced(RID p_agent, Vector3 p_velocity) = 0;
 
 	/// The wanted velocity for the agent as a "suggestion" to the avoidance simulation.
-	/// The simulation will try to fulfil this velocity wish if possible but may change the velocity depending on other agent's and obstacles'.
+	/// The simulation will try to fulfill this velocity wish if possible but may change the velocity depending on other agent's and obstacles'.
 	virtual void agent_set_velocity(RID p_agent, Vector3 p_velocity) = 0;
 
 	/// Position of the agent in world space.
@@ -264,6 +275,10 @@ public:
 	virtual RID obstacle_create() = 0;
 	virtual void obstacle_set_map(RID p_obstacle, RID p_map) = 0;
 	virtual RID obstacle_get_map(RID p_obstacle) const = 0;
+
+	virtual void obstacle_set_paused(RID p_obstacle, bool p_paused) = 0;
+	virtual bool obstacle_get_paused(RID p_obstacle) const = 0;
+
 	virtual void obstacle_set_avoidance_enabled(RID p_obstacle, bool p_enabled) = 0;
 	virtual bool obstacle_get_avoidance_enabled(RID p_obstacle) const = 0;
 	virtual void obstacle_set_use_3d_avoidance(RID p_obstacle, bool p_enabled) = 0;

@@ -30,6 +30,7 @@
 
 #include "openxr_api.h"
 
+#include "extensions/openxr_extension_wrapper_extension.h"
 #include "openxr_interface.h"
 #include "openxr_util.h"
 
@@ -47,7 +48,7 @@
 #ifdef VULKAN_ENABLED
 #define XR_USE_GRAPHICS_API_VULKAN
 #endif
-#ifdef GLES3_ENABLED
+#if defined(GLES3_ENABLED) && !defined(MACOS_ENABLED)
 #ifdef ANDROID_ENABLED
 #define XR_USE_GRAPHICS_API_OPENGL_ES
 #include <EGL/egl.h>
@@ -72,7 +73,7 @@
 #include "extensions/openxr_vulkan_extension.h"
 #endif
 
-#ifdef GLES3_ENABLED
+#if defined(GLES3_ENABLED) && !defined(MACOS_ENABLED)
 #include "extensions/openxr_opengl_extension.h"
 #endif
 
@@ -794,7 +795,7 @@ bool OpenXRAPI::create_swapchains() {
 
 		Also Godot only creates a swapchain for the main output.
 		OpenXR will require us to create swapchains as the render target for additional viewports if we want to use the layer system
-		to optimize text rendering and background rendering as OpenXR may choose to re-use the results for reprojection while we're
+		to optimize text rendering and background rendering as OpenXR may choose to reuse the results for reprojection while we're
 		already rendering the next frame.
 
 		Finally an area we need to expand upon is that Foveated rendering is only enabled for the swap chain we create,
@@ -855,18 +856,19 @@ bool OpenXRAPI::create_swapchains() {
 		}
 
 		if (swapchain_format_to_use == 0) {
-			swapchain_format_to_use = usable_swapchain_formats[0]; // just use the first one and hope for the best...
-			print_line("Couldn't find usable depth swap chain format, using", get_swapchain_format_name(swapchain_format_to_use), "instead.");
+			print_line("Couldn't find usable depth swap chain format, depth buffer will not be submitted.");
 		} else {
 			print_verbose(String("Using depth swap chain format:") + get_swapchain_format_name(swapchain_format_to_use));
-		}
 
-		if (!create_swapchain(XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapchain_format_to_use, recommended_size.width, recommended_size.height, view_configuration_views[0].recommendedSwapchainSampleCount, view_count, swapchains[OPENXR_SWAPCHAIN_DEPTH].swapchain, &swapchains[OPENXR_SWAPCHAIN_DEPTH].swapchain_graphics_data)) {
-			return false;
-		}
+			// Note, if VK_FORMAT_D32_SFLOAT is used here but we're using the forward+ renderer, we should probably output a warning.
 
-		depth_views = (XrCompositionLayerDepthInfoKHR *)memalloc(sizeof(XrCompositionLayerDepthInfoKHR) * view_count);
-		ERR_FAIL_NULL_V_MSG(depth_views, false, "OpenXR Couldn't allocate memory for depth views");
+			if (!create_swapchain(XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, swapchain_format_to_use, recommended_size.width, recommended_size.height, view_configuration_views[0].recommendedSwapchainSampleCount, view_count, swapchains[OPENXR_SWAPCHAIN_DEPTH].swapchain, &swapchains[OPENXR_SWAPCHAIN_DEPTH].swapchain_graphics_data)) {
+				return false;
+			}
+
+			depth_views = (XrCompositionLayerDepthInfoKHR *)memalloc(sizeof(XrCompositionLayerDepthInfoKHR) * view_count);
+			ERR_FAIL_NULL_V_MSG(depth_views, false, "OpenXR Couldn't allocate memory for depth views");
+		}
 	}
 
 	// We create our velocity swapchain if:
@@ -1305,7 +1307,7 @@ bool OpenXRAPI::initialize(const String &p_rendering_driver) {
 		ERR_FAIL_V(false);
 #endif
 	} else if (p_rendering_driver == "opengl3") {
-#ifdef GLES3_ENABLED
+#if defined(GLES3_ENABLED) && !defined(MACOS_ENABLED)
 		graphics_extension = memnew(OpenXROpenGLExtension);
 		register_extension_wrapper(graphics_extension);
 #else
@@ -1666,7 +1668,7 @@ bool OpenXRAPI::process() {
 }
 
 bool OpenXRAPI::acquire_image(OpenXRSwapChainInfo &p_swapchain) {
-	ERR_FAIL_COND_V(p_swapchain.image_acquired, true); // this was not released when it should be, error out and re-use...
+	ERR_FAIL_COND_V(p_swapchain.image_acquired, true); // This was not released when it should be, error out and reuse...
 
 	XrResult result;
 	XrSwapchainImageAcquireInfo swapchain_image_acquire_info = {
@@ -1837,6 +1839,7 @@ RID OpenXRAPI::get_color_texture() {
 }
 
 RID OpenXRAPI::get_depth_texture() {
+	// Note, image will not be acquired if we didn't have a suitable swap chain format.
 	if (submit_depth_buffer && swapchains[OPENXR_SWAPCHAIN_DEPTH].image_acquired) {
 		return graphics_extension->get_texture(swapchains[OPENXR_SWAPCHAIN_DEPTH].swapchain_graphics_data, swapchains[OPENXR_SWAPCHAIN_DEPTH].image_index);
 	} else {

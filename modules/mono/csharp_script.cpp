@@ -120,6 +120,7 @@ void CSharpLanguage::init() {
 	GLOBAL_DEF("dotnet/project/assembly_name", "");
 #ifdef TOOLS_ENABLED
 	GLOBAL_DEF("dotnet/project/solution_directory", "");
+	GLOBAL_DEF(PropertyInfo(Variant::INT, "dotnet/project/assembly_reload_attempts", PROPERTY_HINT_RANGE, "1,16,1,or_greater"), 3);
 #endif
 
 	gdmono = memnew(GDMono);
@@ -770,10 +771,6 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 		return;
 	}
 
-	// TODO:
-	//  Currently, this reloads all scripts, including those whose class is not part of the
-	//  assembly load context being unloaded. As such, we unnecessarily reload GodotTools.
-
 	print_verbose(".NET: Reloading assemblies...");
 
 	// There is no soft reloading with Mono. It's always hard reloading.
@@ -784,8 +781,20 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 		MutexLock lock(script_instances_mutex);
 
 		for (SelfList<CSharpScript> *elem = script_list.first(); elem; elem = elem->next()) {
-			// Cast to CSharpScript to avoid being erased by accident
-			scripts.push_back(Ref<CSharpScript>(elem->self()));
+			// Do not reload scripts with only non-collectible instances to avoid disrupting event subscriptions and such.
+			bool is_reloadable = elem->self()->instances.size() == 0;
+			for (Object *obj : elem->self()->instances) {
+				ERR_CONTINUE(!obj->get_script_instance());
+				CSharpInstance *csi = static_cast<CSharpInstance *>(obj->get_script_instance());
+				if (GDMonoCache::managed_callbacks.GCHandleBridge_GCHandleIsTargetCollectible(csi->get_gchandle_intptr())) {
+					is_reloadable = true;
+					break;
+				}
+			}
+			if (is_reloadable) {
+				// Cast to CSharpScript to avoid being erased by accident.
+				scripts.push_back(Ref<CSharpScript>(elem->self()));
+			}
 		}
 	}
 
@@ -799,6 +808,10 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 			ManagedCallable *managed_callable = elem->self();
 
 			ERR_CONTINUE(managed_callable->delegate_handle.value == nullptr);
+
+			if (!GDMonoCache::managed_callbacks.GCHandleBridge_GCHandleIsTargetCollectible(managed_callable->delegate_handle)) {
+				continue;
+			}
 
 			Array serialized_data;
 
@@ -905,6 +918,15 @@ void CSharpLanguage::reload_assemblies(bool p_soft_reload) {
 
 		scr->was_tool_before_reload = scr->tool;
 		scr->_clear();
+	}
+
+	// Release the delegates that were serialized earlier.
+	{
+		MutexLock lock(ManagedCallable::instances_mutex);
+
+		for (KeyValue<ManagedCallable *, Array> &kv : ManagedCallable::instances_pending_reload) {
+			kv.key->release_delegate_handle();
+		}
 	}
 
 	// Do domain reload
@@ -1158,19 +1180,6 @@ bool CSharpLanguage::debug_break(const String &p_error, bool p_allow_continue) {
 	}
 }
 
-void CSharpLanguage::_on_scripts_domain_about_to_unload() {
-#ifdef GD_MONO_HOT_RELOAD
-	{
-		MutexLock lock(ManagedCallable::instances_mutex);
-
-		for (SelfList<ManagedCallable> *elem = ManagedCallable::instances.first(); elem; elem = elem->next()) {
-			ManagedCallable *managed_callable = elem->self();
-			managed_callable->release_delegate_handle();
-		}
-	}
-#endif
-}
-
 #ifdef TOOLS_ENABLED
 void CSharpLanguage::_editor_init_callback() {
 	// Load GodotTools and initialize GodotSharpEditor
@@ -1188,8 +1197,6 @@ void CSharpLanguage::_editor_init_callback() {
 
 	// Add plugin to EditorNode and enable it
 	EditorNode::add_editor_plugin(godotsharp_editor);
-	ED_SHORTCUT("mono/build_solution", TTR("Build Solution"), KeyModifierMask::ALT | Key::B);
-	ED_SHORTCUT_OVERRIDE("mono/build_solution", "macos", KeyModifierMask::META | KeyModifierMask::CTRL | Key::B);
 	godotsharp_editor->enable_plugin();
 
 	get_singleton()->godotsharp_editor = godotsharp_editor;
@@ -2263,7 +2270,7 @@ void CSharpScript::reload_registered_script(Ref<CSharpScript> p_script) {
 	// If the EditorFileSystem singleton is available, update the file;
 	// otherwise, the file will be updated when the singleton becomes available.
 	EditorFileSystem *efs = EditorFileSystem::get_singleton();
-	if (efs) {
+	if (efs && !p_script->get_path().is_empty()) {
 		efs->update_file(p_script->get_path());
 	}
 #endif
@@ -2320,6 +2327,9 @@ void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 			Variant::Type param_type = (Variant::Type)(int)param["type"];
 			PropertyInfo arg_info = PropertyInfo(param_type, (String)param["name"]);
 			arg_info.usage = (uint32_t)param["usage"];
+			if (param.has("class_name")) {
+				arg_info.class_name = (StringName)param["class_name"];
+			}
 			mi.arguments.push_back(arg_info);
 		}
 
@@ -2350,6 +2360,9 @@ void CSharpScript::update_script_class_info(Ref<CSharpScript> p_script) {
 			Variant::Type param_type = (Variant::Type)(int)param["type"];
 			PropertyInfo arg_info = PropertyInfo(param_type, (String)param["name"]);
 			arg_info.usage = (uint32_t)param["usage"];
+			if (param.has("class_name")) {
+				arg_info.class_name = (StringName)param["class_name"];
+			}
 			mi.arguments.push_back(arg_info);
 		}
 

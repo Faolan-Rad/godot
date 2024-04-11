@@ -55,9 +55,7 @@
 
 // TODO mobile
 #if 0
-#ifdef ANDROID_ENABLED
-#include "support/android_support.h"
-#elif defined(IOS_ENABLED)
+#ifdef IOS_ENABLED
 #include "support/ios_support.h"
 #endif
 #endif
@@ -378,6 +376,12 @@ void GDMono::initialize() {
 
 	godot_plugins_initialize_fn godot_plugins_initialize = nullptr;
 
+	// Check that the .NET assemblies directory exists before trying to use it.
+	if (!DirAccess::exists(GodotSharpDirs::get_api_assemblies_dir())) {
+		OS::get_singleton()->alert(vformat(RTR("Unable to find the .NET assemblies directory.\nMake sure the '%s' directory exists and contains the .NET assemblies."), GodotSharpDirs::get_api_assemblies_dir()), RTR(".NET assemblies not found"));
+		ERR_FAIL_MSG(".NET: Assemblies not found");
+	}
+
 	if (!load_hostfxr(hostfxr_dll_handle)) {
 #if !defined(TOOLS_ENABLED)
 		godot_plugins_initialize = try_load_native_aot_library(hostfxr_dll_handle);
@@ -488,15 +492,31 @@ bool GDMono::_load_project_assembly() {
 #endif
 
 #ifdef GD_MONO_HOT_RELOAD
+void GDMono::reload_failure() {
+	if (++project_load_failure_count >= (int)GLOBAL_GET("dotnet/project/assembly_reload_attempts")) {
+		// After reloading a project has failed n times in a row, update the path and modification time
+		// to stop any further attempts at loading this assembly, which probably is never going to work anyways.
+		project_load_failure_count = 0;
+
+		ERR_PRINT_ED(".NET: Giving up on assembly reloading. Please restart the editor if unloading was failing.");
+
+		String assembly_name = path::get_csharp_project_name();
+		String assembly_path = GodotSharpDirs::get_res_temp_assemblies_dir().path_join(assembly_name + ".dll");
+		assembly_path = ProjectSettings::get_singleton()->globalize_path(assembly_path);
+		project_assembly_path = assembly_path.simplify_path();
+		project_assembly_modified_time = FileAccess::get_modified_time(assembly_path);
+	}
+}
+
 Error GDMono::reload_project_assemblies() {
 	ERR_FAIL_COND_V(!runtime_initialized, ERR_BUG);
 
 	finalizing_scripts_domain = true;
 
-	CSharpLanguage::get_singleton()->_on_scripts_domain_about_to_unload();
-
 	if (!get_plugin_callbacks().UnloadProjectPluginCallback()) {
-		ERR_FAIL_V_MSG(Error::FAILED, ".NET: Failed to unload assemblies.");
+		ERR_PRINT_ED(".NET: Failed to unload assemblies. Please check https://github.com/godotengine/godot/issues/78513 for more information.");
+		reload_failure();
+		return FAILED;
 	}
 
 	finalizing_scripts_domain = false;
@@ -504,8 +524,14 @@ Error GDMono::reload_project_assemblies() {
 	// Load the project's main assembly. Here, during hot-reloading, we do
 	// consider failing to load the project's main assembly to be an error.
 	if (!_load_project_assembly()) {
-		print_error(".NET: Failed to load project assembly.");
+		ERR_PRINT_ED(".NET: Failed to load project assembly.");
+		reload_failure();
 		return ERR_CANT_OPEN;
+	}
+
+	if (project_load_failure_count > 0) {
+		project_load_failure_count = 0;
+		ERR_PRINT_ED(".NET: Assembly reloading succeeded after failures.");
 	}
 
 	return OK;
@@ -531,10 +557,6 @@ GDMono::~GDMono() {
 
 	finalizing_scripts_domain = false;
 	runtime_initialized = false;
-
-#if defined(ANDROID_ENABLED)
-	gdmono::android::support::cleanup();
-#endif
 
 	singleton = nullptr;
 }

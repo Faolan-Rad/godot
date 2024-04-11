@@ -29,6 +29,7 @@
 /**************************************************************************/
 
 #include "code_edit.h"
+#include "code_edit.compat.inc"
 
 #include "core/os/keyboard.h"
 #include "core/string/string_builder.h"
@@ -215,6 +216,14 @@ void CodeEdit::_notification(int p_what) {
 					yofs += theme_cache.line_spacing;
 				}
 			}
+		} break;
+
+		case NOTIFICATION_DRAG_BEGIN: {
+			cancel_code_completion();
+		} break;
+
+		case NOTIFICATION_MOUSE_EXIT: {
+			queue_redraw();
 		} break;
 	}
 }
@@ -2250,9 +2259,8 @@ bool CodeEdit::is_symbol_lookup_on_click_enabled() const {
 	return symbol_lookup_on_click_enabled;
 }
 
-String CodeEdit::get_text_for_symbol_lookup() {
+String CodeEdit::get_text_for_symbol_lookup() const {
 	Point2i mp = get_local_mouse_pos();
-
 	Point2i pos = get_line_column_at_pos(mp, false);
 	int line = pos.y;
 	int col = pos.x;
@@ -2261,25 +2269,29 @@ String CodeEdit::get_text_for_symbol_lookup() {
 		return String();
 	}
 
-	StringBuilder lookup_text;
+	return get_text_with_cursor_char(line, col);
+}
+
+String CodeEdit::get_text_with_cursor_char(int p_line, int p_column) const {
 	const int text_size = get_line_count();
+	StringBuilder result;
 	for (int i = 0; i < text_size; i++) {
 		String line_text = get_line(i);
-
-		if (i == line) {
-			lookup_text += line_text.substr(0, col);
+		if (i == p_line && p_column >= 0 && p_column <= line_text.size()) {
+			result += line_text.substr(0, p_column);
 			/* Not unicode, represents the cursor. */
-			lookup_text += String::chr(0xFFFF);
-			lookup_text += line_text.substr(col, line_text.size());
+			result += String::chr(0xFFFF);
+			result += line_text.substr(p_column, line_text.size());
 		} else {
-			lookup_text += line_text;
+			result += line_text;
 		}
 
 		if (i != text_size - 1) {
-			lookup_text += "\n";
+			result += "\n";
 		}
 	}
-	return lookup_text.as_string();
+
+	return result.as_string();
 }
 
 void CodeEdit::set_symbol_lookup_word_as_valid(bool p_valid) {
@@ -2464,6 +2476,7 @@ void CodeEdit::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_symbol_lookup_on_click_enabled"), &CodeEdit::is_symbol_lookup_on_click_enabled);
 
 	ClassDB::bind_method(D_METHOD("get_text_for_symbol_lookup"), &CodeEdit::get_text_for_symbol_lookup);
+	ClassDB::bind_method(D_METHOD("get_text_with_cursor_char", "line", "column"), &CodeEdit::get_text_with_cursor_char);
 
 	ClassDB::bind_method(D_METHOD("set_symbol_lookup_word_as_valid", "valid"), &CodeEdit::set_symbol_lookup_word_as_valid);
 
@@ -3326,8 +3339,6 @@ CodeEdit::~CodeEdit() {
 
 // Return true if l should come before r
 bool CodeCompletionOptionCompare::operator()(const ScriptLanguage::CodeCompletionOption &l, const ScriptLanguage::CodeCompletionOption &r) const {
-	// Check if we are not completing an empty string in this case there is no reason to get matches characteristics.
-
 	TypedArray<int> lcharac = l.get_option_cached_characteristics();
 	TypedArray<int> rcharac = r.get_option_cached_characteristics();
 
@@ -3344,5 +3355,5 @@ bool CodeCompletionOptionCompare::operator()(const ScriptLanguage::CodeCompletio
 			return l.matches[i].second > r.matches[i].second;
 		}
 	}
-	return l.display < r.display;
+	return l.display.naturalnocasecmp_to(r.display) < 0;
 }

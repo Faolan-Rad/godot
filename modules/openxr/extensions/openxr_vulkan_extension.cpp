@@ -233,9 +233,9 @@ void OpenXRVulkanExtension::get_usable_swapchain_formats(Vector<int64_t> &p_usab
 }
 
 void OpenXRVulkanExtension::get_usable_depth_formats(Vector<int64_t> &p_usable_swap_chains) {
-	p_usable_swap_chains.push_back(VK_FORMAT_R32_SFLOAT);
 	p_usable_swap_chains.push_back(VK_FORMAT_D24_UNORM_S8_UINT);
 	p_usable_swap_chains.push_back(VK_FORMAT_D32_SFLOAT_S8_UINT);
+	p_usable_swap_chains.push_back(VK_FORMAT_D32_SFLOAT);
 }
 
 bool OpenXRVulkanExtension::get_swapchain_image_data(XrSwapchain p_swapchain, int64_t p_swapchain_format, uint32_t p_width, uint32_t p_height, uint32_t p_sample_count, uint32_t p_array_size, void **r_swapchain_graphics_data) {
@@ -308,8 +308,8 @@ bool OpenXRVulkanExtension::get_swapchain_image_data(XrSwapchain p_swapchain, in
 			format = RenderingDevice::DATA_FORMAT_B8G8R8A8_UINT;
 			usage_flags |= RenderingDevice::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT;
 			break;
-		case VK_FORMAT_R32_SFLOAT:
-			format = RenderingDevice::DATA_FORMAT_R32_SFLOAT;
+		case VK_FORMAT_D32_SFLOAT:
+			format = RenderingDevice::DATA_FORMAT_D32_SFLOAT;
 			usage_flags |= RenderingDevice::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 			break;
 		case VK_FORMAT_D24_UNORM_S8_UINT:
@@ -381,8 +381,8 @@ bool OpenXRVulkanExtension::get_swapchain_image_data(XrSwapchain p_swapchain, in
 
 bool OpenXRVulkanExtension::create_projection_fov(const XrFovf p_fov, double p_z_near, double p_z_far, Projection &r_camera_matrix) {
 	// Even though this is a Vulkan renderer we're using OpenGL coordinate systems
-	XrMatrix4x4f matrix;
-	XrMatrix4x4f_CreateProjectionFov(&matrix, GRAPHICS_OPENGL, p_fov, (float)p_z_near, (float)p_z_far);
+	OpenXRUtil::XrMatrix4x4f matrix;
+	OpenXRUtil::XrMatrix4x4f_CreateProjectionFov(&matrix, OpenXRUtil::GRAPHICS_OPENGL, p_fov, (float)p_z_near, (float)p_z_far);
 
 	for (int j = 0; j < 4; j++) {
 		for (int i = 0; i < 4; i++) {

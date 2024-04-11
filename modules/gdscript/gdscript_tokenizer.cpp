@@ -163,6 +163,24 @@ const char *GDScriptTokenizer::Token::get_name() const {
 	return token_names[type];
 }
 
+bool GDScriptTokenizer::Token::can_precede_bin_op() const {
+	switch (type) {
+		case IDENTIFIER:
+		case LITERAL:
+		case SELF:
+		case BRACKET_CLOSE:
+		case BRACE_CLOSE:
+		case PARENTHESIS_CLOSE:
+		case CONST_PI:
+		case CONST_TAU:
+		case CONST_INF:
+		case CONST_NAN:
+			return true;
+		default:
+			return false;
+	}
+}
+
 bool GDScriptTokenizer::Token::is_identifier() const {
 	// Note: Most keywords should not be recognized as identifiers.
 	// These are only exceptions for stuff that already is on the engine's API.
@@ -383,6 +401,7 @@ GDScriptTokenizer::Token GDScriptTokenizer::make_token(Token::Type p_type) {
 		}
 	}
 
+	last_token = token;
 	return token;
 }
 
@@ -560,6 +579,24 @@ GDScriptTokenizer::Token GDScriptTokenizer::potential_identifier() {
 		return make_identifier(name);
 	}
 
+	if (!only_ascii) {
+		// Kept here in case the order with push_error matters.
+		Token id = make_identifier(name);
+
+#ifdef DEBUG_ENABLED
+		// Additional checks for identifiers but only in debug and if it's available in TextServer.
+		if (TS->has_feature(TextServer::FEATURE_UNICODE_SECURITY)) {
+			int64_t confusable = TS->is_confusable(name, keyword_list);
+			if (confusable >= 0) {
+				push_error(vformat(R"(Identifier "%s" is visually similar to the GDScript keyword "%s" and thus not allowed.)", name, keyword_list[confusable]));
+			}
+		}
+#endif // DEBUG_ENABLED
+
+		// Cannot be a keyword, as keywords are ASCII only.
+		return id;
+	}
+
 	// Define some helper macros for the switch case.
 #define KEYWORD_GROUP_CASE(char) \
 	break;                       \
@@ -595,19 +632,7 @@ GDScriptTokenizer::Token GDScriptTokenizer::potential_identifier() {
 	}
 
 	// Not a keyword, so must be an identifier.
-	Token id = make_identifier(name);
-
-#ifdef DEBUG_ENABLED
-	// Additional checks for identifiers but only in debug and if it's available in TextServer.
-	if (!only_ascii && TS->has_feature(TextServer::FEATURE_UNICODE_SECURITY)) {
-		int64_t confusable = TS->is_confusable(name, keyword_list);
-		if (confusable >= 0) {
-			push_error(vformat(R"(Identifier "%s" is visually similar to the GDScript keyword "%s" and thus not allowed.)", name, keyword_list[confusable]));
-		}
-	}
-#endif // DEBUG_ENABLED
-
-	return id;
+	return make_identifier(name);
 
 #undef KEYWORD_GROUP_CASE
 #undef KEYWORD
@@ -628,6 +653,7 @@ void GDScriptTokenizer::newline(bool p_make_token) {
 		newline.leftmost_column = newline.start_column;
 		newline.rightmost_column = newline.end_column;
 		pending_newline = true;
+		last_token = newline;
 		last_newline = newline;
 	}
 
@@ -643,6 +669,11 @@ GDScriptTokenizer::Token GDScriptTokenizer::number() {
 	bool has_exponent = false;
 	bool has_error = false;
 	bool (*digit_check_func)(char32_t) = is_digit;
+
+	// Sign before hexadecimal or binary.
+	if ((_peek(-1) == '+' || _peek(-1) == '-') && _peek() == '0') {
+		_advance();
+	}
 
 	if (_peek(-1) == '.') {
 		has_decimal = true;
@@ -1463,6 +1494,9 @@ GDScriptTokenizer::Token GDScriptTokenizer::scan() {
 			if (_peek() == '=') {
 				_advance();
 				return make_token(Token::PLUS_EQUAL);
+			} else if (is_digit(_peek()) && !last_token.can_precede_bin_op()) {
+				// Number starting with '+'.
+				return number();
 			} else {
 				return make_token(Token::PLUS);
 			}
@@ -1470,6 +1504,9 @@ GDScriptTokenizer::Token GDScriptTokenizer::scan() {
 			if (_peek() == '=') {
 				_advance();
 				return make_token(Token::MINUS_EQUAL);
+			} else if (is_digit(_peek()) && !last_token.can_precede_bin_op()) {
+				// Number starting with '-'.
+				return number();
 			} else if (_peek() == '>') {
 				_advance();
 				return make_token(Token::FORWARD_ARROW);
@@ -1579,9 +1616,9 @@ GDScriptTokenizer::Token GDScriptTokenizer::scan() {
 
 		default:
 			if (is_whitespace(c)) {
-				return make_error(vformat(R"(Invalid white space character "\\u%X".)", static_cast<int32_t>(c)));
+				return make_error(vformat(R"(Invalid white space character U+%04X.)", static_cast<int32_t>(c)));
 			} else {
-				return make_error(vformat(R"(Unknown character "%s".)", String(&c, 1)));
+				return make_error(vformat(R"(Invalid character "%c" (U+%04X).)", c, static_cast<int32_t>(c)));
 			}
 	}
 }

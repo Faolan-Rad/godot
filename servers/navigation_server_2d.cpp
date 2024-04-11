@@ -391,6 +391,8 @@ void NavigationServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("query_path", "parameters", "result"), &NavigationServer2D::query_path);
 
 	ClassDB::bind_method(D_METHOD("region_create"), &NavigationServer2D::region_create);
+	ClassDB::bind_method(D_METHOD("region_set_enabled", "region", "enabled"), &NavigationServer2D::region_set_enabled);
+	ClassDB::bind_method(D_METHOD("region_get_enabled", "region"), &NavigationServer2D::region_get_enabled);
 	ClassDB::bind_method(D_METHOD("region_set_use_edge_connections", "region", "enabled"), &NavigationServer2D::region_set_use_edge_connections);
 	ClassDB::bind_method(D_METHOD("region_get_use_edge_connections", "region"), &NavigationServer2D::region_get_use_edge_connections);
 	ClassDB::bind_method(D_METHOD("region_set_enter_cost", "region", "enter_cost"), &NavigationServer2D::region_set_enter_cost);
@@ -413,6 +415,8 @@ void NavigationServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("link_create"), &NavigationServer2D::link_create);
 	ClassDB::bind_method(D_METHOD("link_set_map", "link", "map"), &NavigationServer2D::link_set_map);
 	ClassDB::bind_method(D_METHOD("link_get_map", "link"), &NavigationServer2D::link_get_map);
+	ClassDB::bind_method(D_METHOD("link_set_enabled", "link", "enabled"), &NavigationServer2D::link_set_enabled);
+	ClassDB::bind_method(D_METHOD("link_get_enabled", "link"), &NavigationServer2D::link_get_enabled);
 	ClassDB::bind_method(D_METHOD("link_set_bidirectional", "link", "bidirectional"), &NavigationServer2D::link_set_bidirectional);
 	ClassDB::bind_method(D_METHOD("link_is_bidirectional", "link"), &NavigationServer2D::link_is_bidirectional);
 	ClassDB::bind_method(D_METHOD("link_set_navigation_layers", "link", "navigation_layers"), &NavigationServer2D::link_set_navigation_layers);
@@ -433,6 +437,8 @@ void NavigationServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("agent_get_avoidance_enabled", "agent"), &NavigationServer2D::agent_get_avoidance_enabled);
 	ClassDB::bind_method(D_METHOD("agent_set_map", "agent", "map"), &NavigationServer2D::agent_set_map);
 	ClassDB::bind_method(D_METHOD("agent_get_map", "agent"), &NavigationServer2D::agent_get_map);
+	ClassDB::bind_method(D_METHOD("agent_set_paused", "agent", "paused"), &NavigationServer2D::agent_set_paused);
+	ClassDB::bind_method(D_METHOD("agent_get_paused", "agent"), &NavigationServer2D::agent_get_paused);
 	ClassDB::bind_method(D_METHOD("agent_set_neighbor_distance", "agent", "distance"), &NavigationServer2D::agent_set_neighbor_distance);
 	ClassDB::bind_method(D_METHOD("agent_set_max_neighbors", "agent", "count"), &NavigationServer2D::agent_set_max_neighbors);
 	ClassDB::bind_method(D_METHOD("agent_set_time_horizon_agents", "agent", "time_horizon"), &NavigationServer2D::agent_set_time_horizon_agents);
@@ -453,6 +459,8 @@ void NavigationServer2D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("obstacle_get_avoidance_enabled", "obstacle"), &NavigationServer2D::obstacle_get_avoidance_enabled);
 	ClassDB::bind_method(D_METHOD("obstacle_set_map", "obstacle", "map"), &NavigationServer2D::obstacle_set_map);
 	ClassDB::bind_method(D_METHOD("obstacle_get_map", "obstacle"), &NavigationServer2D::obstacle_get_map);
+	ClassDB::bind_method(D_METHOD("obstacle_set_paused", "obstacle", "paused"), &NavigationServer2D::obstacle_set_paused);
+	ClassDB::bind_method(D_METHOD("obstacle_get_paused", "obstacle"), &NavigationServer2D::obstacle_get_paused);
 	ClassDB::bind_method(D_METHOD("obstacle_set_radius", "obstacle", "radius"), &NavigationServer2D::obstacle_set_radius);
 	ClassDB::bind_method(D_METHOD("obstacle_set_velocity", "obstacle", "velocity"), &NavigationServer2D::obstacle_set_velocity);
 	ClassDB::bind_method(D_METHOD("obstacle_set_position", "obstacle", "position"), &NavigationServer2D::obstacle_set_position);
@@ -532,6 +540,8 @@ RID FORWARD_2_C(map_get_closest_point_owner, RID, p_map, const Vector2 &, p_poin
 
 RID FORWARD_0(region_create);
 
+void FORWARD_2(region_set_enabled, RID, p_region, bool, p_enabled, rid_to_rid, bool_to_bool);
+bool FORWARD_1_C(region_get_enabled, RID, p_region, rid_to_rid);
 void FORWARD_2(region_set_use_edge_connections, RID, p_region, bool, p_enabled, rid_to_rid, bool_to_bool);
 bool FORWARD_1_C(region_get_use_edge_connections, RID, p_region, rid_to_rid);
 
@@ -560,6 +570,8 @@ RID FORWARD_0(link_create);
 
 void FORWARD_2(link_set_map, RID, p_link, RID, p_map, rid_to_rid, rid_to_rid);
 RID FORWARD_1_C(link_get_map, RID, p_link, rid_to_rid);
+void FORWARD_2(link_set_enabled, RID, p_link, bool, p_enabled, rid_to_rid, bool_to_bool);
+bool FORWARD_1_C(link_get_enabled, RID, p_link, rid_to_rid);
 void FORWARD_2(link_set_bidirectional, RID, p_link, bool, p_bidirectional, rid_to_rid, bool_to_bool);
 bool FORWARD_1_C(link_is_bidirectional, RID, p_link, rid_to_rid);
 void FORWARD_2(link_set_navigation_layers, RID, p_link, uint32_t, p_navigation_layers, rid_to_rid, uint32_to_uint32);
@@ -594,6 +606,8 @@ void FORWARD_2(agent_set_velocity, RID, p_agent, Vector2, p_velocity, rid_to_rid
 void FORWARD_2(agent_set_position, RID, p_agent, Vector2, p_position, rid_to_rid, v2_to_v3);
 
 bool FORWARD_1_C(agent_is_map_changed, RID, p_agent, rid_to_rid);
+void FORWARD_2(agent_set_paused, RID, p_agent, bool, p_paused, rid_to_rid, bool_to_bool);
+bool FORWARD_1_C(agent_get_paused, RID, p_agent, rid_to_rid);
 
 void FORWARD_1(free, RID, p_object, rid_to_rid);
 void FORWARD_2(agent_set_avoidance_callback, RID, p_agent, Callable, p_callback, rid_to_rid, callable_to_callable);
@@ -610,6 +624,8 @@ void FORWARD_2(obstacle_set_avoidance_enabled, RID, p_obstacle, bool, p_enabled,
 bool FORWARD_1_C(obstacle_get_avoidance_enabled, RID, p_obstacle, rid_to_rid);
 void FORWARD_2(obstacle_set_map, RID, p_obstacle, RID, p_map, rid_to_rid, rid_to_rid);
 RID FORWARD_1_C(obstacle_get_map, RID, p_obstacle, rid_to_rid);
+void FORWARD_2(obstacle_set_paused, RID, p_obstacle, bool, p_paused, rid_to_rid, bool_to_bool);
+bool FORWARD_1_C(obstacle_get_paused, RID, p_obstacle, rid_to_rid);
 void FORWARD_2(obstacle_set_radius, RID, p_obstacle, real_t, p_radius, rid_to_rid, real_to_real);
 void FORWARD_2(obstacle_set_velocity, RID, p_obstacle, Vector2, p_velocity, rid_to_rid, v2_to_v3);
 void FORWARD_2(obstacle_set_position, RID, p_obstacle, Vector2, p_position, rid_to_rid, v2_to_v3);

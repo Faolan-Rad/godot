@@ -43,6 +43,7 @@ class ThemeOwner;
 class Window : public Viewport {
 	GDCLASS(Window, Viewport)
 public:
+	// Keep synced with enum hint for `mode` property.
 	enum Mode {
 		MODE_WINDOWED = DisplayServer::WINDOW_MODE_WINDOWED,
 		MODE_MINIMIZED = DisplayServer::WINDOW_MODE_MINIMIZED,
@@ -88,6 +89,7 @@ public:
 		DEFAULT_WINDOW_SIZE = 100,
 	};
 
+	// Keep synced with enum hint for `initial_position` property.
 	enum WindowInitialPosition {
 		WINDOW_INITIAL_POSITION_ABSOLUTE,
 		WINDOW_INITIAL_POSITION_CENTER_PRIMARY_SCREEN,
@@ -203,7 +205,6 @@ protected:
 	virtual void _update_theme_item_cache();
 
 	virtual void _post_popup() {}
-	virtual Size2 _get_contents_minimum_size() const;
 	static void _bind_methods();
 	void _notification(int p_what);
 
@@ -214,6 +215,8 @@ protected:
 
 	virtual void add_child_notify(Node *p_child) override;
 	virtual void remove_child_notify(Node *p_child) override;
+
+	GDVIRTUAL0RC(Vector2, _get_contents_minimum_size)
 
 public:
 	enum {
@@ -313,7 +316,7 @@ public:
 	Window *get_parent_visible_window() const;
 	Viewport *get_parent_viewport() const;
 
-	void popup(const Rect2i &p_screen_rect = Rect2i());
+	virtual void popup(const Rect2i &p_screen_rect = Rect2i());
 	void popup_on_parent(const Rect2i &p_parent_rect);
 	void popup_centered(const Size2i &p_minsize = Size2i());
 	void popup_centered_ratio(float p_ratio = 0.8);
@@ -402,9 +405,12 @@ public:
 	virtual Transform2D get_screen_transform_internal(bool p_absolute_position = false) const override;
 	virtual Transform2D get_popup_base_transform() const override;
 	virtual bool is_directly_attached_to_screen() const override;
+	virtual bool is_attached_in_viewport() const override;
 
 	Rect2i get_parent_rect() const;
 	virtual DisplayServer::WindowID get_window_id() const override;
+
+	virtual Size2 _get_contents_minimum_size() const;
 
 	Window();
 	~Window();

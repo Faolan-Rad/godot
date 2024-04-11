@@ -101,6 +101,9 @@ public:
 	/// Creates a new region.
 	virtual RID region_create();
 
+	virtual void region_set_enabled(RID p_region, bool p_enabled);
+	virtual bool region_get_enabled(RID p_region) const;
+
 	virtual void region_set_use_edge_connections(RID p_region, bool p_enabled);
 	virtual bool region_get_use_edge_connections(RID p_region) const;
 
@@ -144,6 +147,9 @@ public:
 	virtual void link_set_map(RID p_link, RID p_map);
 	virtual RID link_get_map(RID p_link) const;
 
+	virtual void link_set_enabled(RID p_link, bool p_enabled);
+	virtual bool link_get_enabled(RID p_link) const;
+
 	/// Set whether this link travels in both directions.
 	virtual void link_set_bidirectional(RID p_link, bool p_bidirectional);
 	virtual bool link_is_bidirectional(RID p_link) const;
@@ -178,6 +184,10 @@ public:
 	/// Put the agent in the map.
 	virtual void agent_set_map(RID p_agent, RID p_map);
 	virtual RID agent_get_map(RID p_agent) const;
+
+	virtual void agent_set_paused(RID p_agent, bool p_paused);
+	virtual bool agent_get_paused(RID p_agent) const;
+
 	virtual void agent_set_avoidance_enabled(RID p_agent, bool p_enabled);
 	virtual bool agent_get_avoidance_enabled(RID p_agent) const;
 
@@ -222,7 +232,7 @@ public:
 	virtual void agent_set_velocity_forced(RID p_agent, Vector2 p_velocity);
 
 	/// The wanted velocity for the agent as a "suggestion" to the avoidance simulation.
-	/// The simulation will try to fulfil this velocity wish if possible but may change the velocity depending on other agent's and obstacles'.
+	/// The simulation will try to fulfill this velocity wish if possible but may change the velocity depending on other agent's and obstacles'.
 	virtual void agent_set_velocity(RID p_agent, Vector2 p_velocity);
 
 	/// Position of the agent in world space.
@@ -244,6 +254,8 @@ public:
 	virtual bool obstacle_get_avoidance_enabled(RID p_obstacle) const;
 	virtual void obstacle_set_map(RID p_obstacle, RID p_map);
 	virtual RID obstacle_get_map(RID p_obstacle) const;
+	virtual void obstacle_set_paused(RID p_obstacle, bool p_paused);
+	virtual bool obstacle_get_paused(RID p_obstacle) const;
 	virtual void obstacle_set_radius(RID p_obstacle, real_t p_radius);
 	virtual void obstacle_set_velocity(RID p_obstacle, Vector2 p_velocity);
 	virtual void obstacle_set_position(RID p_obstacle, Vector2 p_position);

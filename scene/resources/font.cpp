@@ -30,12 +30,12 @@
 
 #include "font.h"
 
-#include "core/core_string_names.h"
 #include "core/io/image_loader.h"
 #include "core/io/resource_loader.h"
 #include "core/string/translation.h"
 #include "core/templates/hash_map.h"
 #include "core/templates/hashfuncs.h"
+#include "scene/resources/image_texture.h"
 #include "scene/resources/text_line.h"
 #include "scene/resources/text_paragraph.h"
 #include "scene/resources/theme.h"
@@ -97,6 +97,7 @@ void Font::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_supported_feature_list"), &Font::get_supported_feature_list);
 	ClassDB::bind_method(D_METHOD("get_supported_variation_list"), &Font::get_supported_variation_list);
 	ClassDB::bind_method(D_METHOD("get_face_count"), &Font::get_face_count);
+
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "fallbacks", PROPERTY_HINT_ARRAY_TYPE, MAKE_RESOURCE_TYPE_HINT("Font")), "set_fallbacks", "get_fallbacks");
 }
 
@@ -160,14 +161,14 @@ void Font::set_fallbacks(const TypedArray<Font> &p_fallbacks) {
 	for (int i = 0; i < fallbacks.size(); i++) {
 		Ref<Font> f = fallbacks[i];
 		if (f.is_valid()) {
-			f->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(this, &Font::_invalidate_rids));
+			f->disconnect_changed(callable_mp(this, &Font::_invalidate_rids));
 		}
 	}
 	fallbacks = p_fallbacks;
 	for (int i = 0; i < fallbacks.size(); i++) {
 		Ref<Font> f = fallbacks[i];
 		if (f.is_valid()) {
-			f->connect(CoreStringNames::get_singleton()->changed, callable_mp(this, &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+			f->connect_changed(callable_mp(this, &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 		}
 	}
 	_invalidate_rids();
@@ -1272,9 +1273,9 @@ void FontFile::_get_property_list(List<PropertyInfo> *p_list) const {
 		String prefix = "cache/" + itos(i) + "/";
 		TypedArray<Vector2i> sizes = get_size_cache_list(i);
 		p_list->push_back(PropertyInfo(Variant::DICTIONARY, prefix + "variation_coordinates", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
-		p_list->push_back(PropertyInfo(Variant::INT, "face_index", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
-		p_list->push_back(PropertyInfo(Variant::FLOAT, "embolden", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
-		p_list->push_back(PropertyInfo(Variant::TRANSFORM2D, "transform", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
+		p_list->push_back(PropertyInfo(Variant::INT, prefix + "face_index", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
+		p_list->push_back(PropertyInfo(Variant::FLOAT, prefix + "embolden", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
+		p_list->push_back(PropertyInfo(Variant::TRANSFORM2D, prefix + "transform", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE));
 
 		for (int j = 0; j < sizes.size(); j++) {
 			Vector2i sz = sizes[j];
@@ -2679,12 +2680,12 @@ void FontVariation::_update_rids() const {
 
 void FontVariation::reset_state() {
 	if (base_font.is_valid()) {
-		base_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+		base_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		base_font.unref();
 	}
 
 	if (theme_font.is_valid()) {
-		theme_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+		theme_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		theme_font.unref();
 	}
 
@@ -2701,11 +2702,11 @@ void FontVariation::reset_state() {
 void FontVariation::set_base_font(const Ref<Font> &p_font) {
 	if (base_font != p_font) {
 		if (base_font.is_valid()) {
-			base_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+			base_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		}
 		base_font = p_font;
 		if (base_font.is_valid()) {
-			base_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+			base_font->connect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 		}
 		_invalidate_rids();
 		notify_property_list_changed();
@@ -2718,7 +2719,7 @@ Ref<Font> FontVariation::get_base_font() const {
 
 Ref<Font> FontVariation::_get_base_font_or_default() const {
 	if (theme_font.is_valid()) {
-		theme_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids));
+		theme_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids));
 		theme_font.unref();
 	}
 
@@ -2739,7 +2740,7 @@ Ref<Font> FontVariation::_get_base_font_or_default() const {
 				}
 				if (f.is_valid()) {
 					theme_font = f;
-					theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+					theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 				}
 				return f;
 			}
@@ -2759,7 +2760,7 @@ Ref<Font> FontVariation::_get_base_font_or_default() const {
 				}
 				if (f.is_valid()) {
 					theme_font = f;
-					theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+					theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 				}
 				return f;
 			}
@@ -2770,7 +2771,7 @@ Ref<Font> FontVariation::_get_base_font_or_default() const {
 		if (f != this) {
 			if (f.is_valid()) {
 				theme_font = f;
-				theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+				theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<FontVariation *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 			}
 			return f;
 		}
@@ -2953,7 +2954,7 @@ void SystemFont::_update_rids() const {
 
 void SystemFont::_update_base_font() {
 	if (base_font.is_valid()) {
-		base_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+		base_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		base_font.unref();
 	}
 
@@ -3034,7 +3035,7 @@ void SystemFont::_update_base_font() {
 	}
 
 	if (base_font.is_valid()) {
-		base_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+		base_font->connect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 	}
 
 	_invalidate_rids();
@@ -3043,12 +3044,12 @@ void SystemFont::_update_base_font() {
 
 void SystemFont::reset_state() {
 	if (base_font.is_valid()) {
-		base_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+		base_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		base_font.unref();
 	}
 
 	if (theme_font.is_valid()) {
-		theme_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
+		theme_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(this), &Font::_invalidate_rids));
 		theme_font.unref();
 	}
 
@@ -3074,7 +3075,7 @@ void SystemFont::reset_state() {
 
 Ref<Font> SystemFont::_get_base_font_or_default() const {
 	if (theme_font.is_valid()) {
-		theme_font->disconnect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids));
+		theme_font->disconnect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids));
 		theme_font.unref();
 	}
 
@@ -3095,7 +3096,7 @@ Ref<Font> SystemFont::_get_base_font_or_default() const {
 				}
 				if (f.is_valid()) {
 					theme_font = f;
-					theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+					theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 				}
 				return f;
 			}
@@ -3115,7 +3116,7 @@ Ref<Font> SystemFont::_get_base_font_or_default() const {
 				}
 				if (f.is_valid()) {
 					theme_font = f;
-					theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+					theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 				}
 				return f;
 			}
@@ -3126,7 +3127,7 @@ Ref<Font> SystemFont::_get_base_font_or_default() const {
 		if (f != this) {
 			if (f.is_valid()) {
 				theme_font = f;
-				theme_font->connect(CoreStringNames::get_singleton()->changed, callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
+				theme_font->connect_changed(callable_mp(reinterpret_cast<Font *>(const_cast<SystemFont *>(this)), &Font::_invalidate_rids), CONNECT_REFERENCE_COUNTED);
 			}
 			return f;
 		}

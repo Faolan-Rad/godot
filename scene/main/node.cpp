@@ -46,11 +46,6 @@
 
 #include <stdint.h>
 
-VARIANT_ENUM_CAST(Node::ProcessMode);
-VARIANT_ENUM_CAST(Node::ProcessThreadGroup);
-VARIANT_BITFIELD_CAST(Node::ProcessThreadMessages);
-VARIANT_ENUM_CAST(Node::InternalMode);
-
 int Node::orphan_node_count = 0;
 
 thread_local Node *Node::current_process_thread_group = nullptr;
@@ -600,9 +595,11 @@ void Node::_propagate_pause_notification(bool p_enable) {
 		notification(NOTIFICATION_UNPAUSED);
 	}
 
+	data.blocked++;
 	for (KeyValue<StringName, Node *> &K : data.children) {
 		K.value->_propagate_pause_notification(p_enable);
 	}
+	data.blocked--;
 }
 
 Node::ProcessMode Node::get_process_mode() const {
@@ -620,12 +617,14 @@ void Node::_propagate_process_owner(Node *p_owner, int p_pause_notification, int
 		notification(p_enabled_notification);
 	}
 
+	data.blocked++;
 	for (KeyValue<StringName, Node *> &K : data.children) {
 		Node *c = K.value;
 		if (c->data.process_mode == PROCESS_MODE_INHERIT) {
 			c->_propagate_process_owner(p_owner, p_pause_notification, p_enabled_notification);
 		}
 	}
+	data.blocked--;
 }
 
 void Node::set_multiplayer_authority(int p_peer_id, bool p_recursive) {
@@ -646,7 +645,8 @@ int Node::get_multiplayer_authority() const {
 bool Node::is_multiplayer_authority() const {
 	ERR_FAIL_COND_V(!is_inside_tree(), false);
 
-	return get_multiplayer()->get_unique_id() == data.multiplayer_authority;
+	Ref<MultiplayerAPI> api = get_multiplayer();
+	return api.is_valid() && (api->get_unique_id() == data.multiplayer_authority);
 }
 
 /***** RPC CONFIG ********/
@@ -725,7 +725,12 @@ Error Node::_rpc_id_bind(const Variant **p_args, int p_argcount, Callable::CallE
 
 Error Node::rpcp(int p_peer_id, const StringName &p_method, const Variant **p_arg, int p_argcount) {
 	ERR_FAIL_COND_V(!is_inside_tree(), ERR_UNCONFIGURED);
-	return get_multiplayer()->rpcp(this, p_peer_id, p_method, p_arg, p_argcount);
+
+	Ref<MultiplayerAPI> api = get_multiplayer();
+	if (api.is_null()) {
+		return ERR_UNCONFIGURED;
+	}
+	return api->rpcp(this, p_peer_id, p_method, p_arg, p_argcount);
 }
 
 Ref<MultiplayerAPI> Node::get_multiplayer() const {
@@ -934,9 +939,11 @@ void Node::set_process_thread_group_order(int p_order) {
 	if (data.process_thread_group_order == p_order) {
 		return;
 	}
-	// Make sure we are in SceneTree and an actual process owner
+
+	data.process_thread_group_order = p_order;
+
+	// Not yet in the tree (or not a group owner, in whose case this is pointless but harmless); trivial update.
 	if (!is_inside_tree() || data.process_thread_group_owner != this) {
-		data.process_thread_group_order = p_order;
 		return;
 	}
 
@@ -952,8 +959,8 @@ void Node::set_process_priority(int p_priority) {
 	if (data.process_priority == p_priority) {
 		return;
 	}
-	// Make sure we are in SceneTree and an actual process owner
 	if (!is_inside_tree()) {
+		// Not yet in the tree; trivial update.
 		data.process_priority = p_priority;
 		return;
 	}
@@ -974,8 +981,8 @@ void Node::set_physics_process_priority(int p_priority) {
 	if (data.physics_process_priority == p_priority) {
 		return;
 	}
-	// Make sure we are in SceneTree and an actual physics_process owner
 	if (!is_inside_tree()) {
+		// Not yet in the tree; trivial update.
 		data.physics_process_priority = p_priority;
 		return;
 	}
@@ -998,11 +1005,11 @@ void Node::set_process_thread_group(ProcessThreadGroup p_mode) {
 	}
 
 	if (!is_inside_tree()) {
+		// Not yet in the tree; trivial update.
 		data.process_thread_group = p_mode;
 		return;
 	}
 
-	// Mode changed, must update everything.
 	_remove_tree_from_process_thread_group();
 	if (data.process_thread_group != PROCESS_THREAD_GROUP_INHERIT) {
 		_remove_process_group();
@@ -1032,7 +1039,7 @@ Node::ProcessThreadGroup Node::get_process_thread_group() const {
 
 void Node::set_process_thread_messages(BitField<ProcessThreadMessages> p_flags) {
 	ERR_THREAD_GUARD
-	if (data.process_thread_group_order == p_flags) {
+	if (data.process_thread_messages == p_flags) {
 		return;
 	}
 
@@ -1137,7 +1144,7 @@ void Node::_set_name_nocheck(const StringName &p_name) {
 }
 
 void Node::set_name(const String &p_name) {
-	ERR_FAIL_COND_MSG(data.inside_tree && !Thread::is_main_thread(), "Changing the name to nodes inside the SceneTree is only allowed from the main thread. Use call_deferred(\"set_name\",new_name).");
+	ERR_FAIL_COND_MSG(data.inside_tree && !Thread::is_main_thread(), "Changing the name to nodes inside the SceneTree is only allowed from the main thread. Use `set_name.call_deferred(new_name)`.");
 	String name = p_name.validate_node_name();
 
 	ERR_FAIL_COND(name.is_empty());
@@ -1149,9 +1156,9 @@ void Node::set_name(const String &p_name) {
 	data.name = name;
 
 	if (data.parent) {
-		data.parent->data.children.erase(old_name);
 		data.parent->_validate_child_name(this, true);
-		data.parent->data.children.insert(data.name, this);
+		bool success = data.parent->data.children.replace_key(old_name, data.name);
+		ERR_FAIL_COND_MSG(!success, "Renaming child in hashtable failed, this is a bug.");
 	}
 
 	if (data.unique_name_in_owner && data.owner) {
@@ -1401,9 +1408,9 @@ void Node::add_child(Node *p_child, bool p_force_readable_name, InternalMode p_i
 void Node::add_sibling(Node *p_sibling, bool p_force_readable_name) {
 	ERR_FAIL_COND_MSG(data.inside_tree && !Thread::is_main_thread(), "Adding a sibling to a node inside the SceneTree is only allowed from the main thread. Use call_deferred(\"add_sibling\",node).");
 	ERR_FAIL_NULL(p_sibling);
-	ERR_FAIL_NULL(data.parent);
 	ERR_FAIL_COND_MSG(p_sibling == this, vformat("Can't add sibling '%s' to itself.", p_sibling->get_name())); // adding to itself!
-	ERR_FAIL_COND_MSG(data.blocked > 0, "Parent node is busy setting up children, `add_sibling()` failed. Consider using `add_sibling.call_deferred(sibling)` instead.");
+	ERR_FAIL_NULL(data.parent);
+	ERR_FAIL_COND_MSG(data.parent->data.blocked > 0, "Parent node is busy setting up children, `add_sibling()` failed. Consider using `add_sibling.call_deferred(sibling)` instead.");
 
 	data.parent->add_child(p_sibling, p_force_readable_name, data.internal_mode);
 	data.parent->_update_children_cache();
@@ -1670,25 +1677,19 @@ TypedArray<Node> Node::find_children(const String &p_pattern, const String &p_ty
 			continue;
 		}
 
-		if (!p_pattern.is_empty()) {
-			if (!cptr[i]->data.name.operator String().match(p_pattern)) {
-				continue;
-			} else if (p_type.is_empty()) {
+		if (p_pattern.is_empty() || cptr[i]->data.name.operator String().match(p_pattern)) {
+			if (p_type.is_empty() || cptr[i]->is_class(p_type)) {
 				ret.append(cptr[i]);
-			}
-		}
+			} else if (cptr[i]->get_script_instance()) {
+				Ref<Script> scr = cptr[i]->get_script_instance()->get_script();
+				while (scr.is_valid()) {
+					if ((ScriptServer::is_global_class(p_type) && ScriptServer::get_global_class_path(p_type) == scr->get_path()) || p_type == scr->get_path()) {
+						ret.append(cptr[i]);
+						break;
+					}
 
-		if (cptr[i]->is_class(p_type)) {
-			ret.append(cptr[i]);
-		} else if (cptr[i]->get_script_instance()) {
-			Ref<Script> scr = cptr[i]->get_script_instance()->get_script();
-			while (scr.is_valid()) {
-				if ((ScriptServer::is_global_class(p_type) && ScriptServer::get_global_class_path(p_type) == scr->get_path()) || p_type == scr->get_path()) {
-					ret.append(cptr[i]);
-					break;
+					scr = scr->get_base_script();
 				}
-
-				scr = scr->get_base_script();
 			}
 		}
 
@@ -1910,7 +1911,7 @@ void Node::set_owner(Node *p_owner) {
 		check = check->data.parent;
 	}
 
-	ERR_FAIL_COND(!owner_valid);
+	ERR_FAIL_COND_MSG(!owner_valid, "Invalid owner. Owner must be an ancestor in the tree.");
 
 	_set_owner_nocheck(p_owner);
 
@@ -3446,9 +3447,9 @@ void Node::_bind_methods() {
 	BIND_ENUM_CONSTANT(PROCESS_THREAD_GROUP_MAIN_THREAD);
 	BIND_ENUM_CONSTANT(PROCESS_THREAD_GROUP_SUB_THREAD);
 
-	BIND_ENUM_CONSTANT(FLAG_PROCESS_THREAD_MESSAGES);
-	BIND_ENUM_CONSTANT(FLAG_PROCESS_THREAD_MESSAGES_PHYSICS);
-	BIND_ENUM_CONSTANT(FLAG_PROCESS_THREAD_MESSAGES_ALL);
+	BIND_BITFIELD_FLAG(FLAG_PROCESS_THREAD_MESSAGES);
+	BIND_BITFIELD_FLAG(FLAG_PROCESS_THREAD_MESSAGES_PHYSICS);
+	BIND_BITFIELD_FLAG(FLAG_PROCESS_THREAD_MESSAGES_ALL);
 
 	BIND_ENUM_CONSTANT(DUPLICATE_SIGNALS);
 	BIND_ENUM_CONSTANT(DUPLICATE_GROUPS);

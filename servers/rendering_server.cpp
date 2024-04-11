@@ -402,9 +402,9 @@ Error RenderingServer::_surface_set_data(Array p_arrays, uint32_t p_format, uint
 				const Vector3 *src = array.ptr();
 				for (int i = 0; i < p_vertex_array_len; i++) {
 					Vector2 res = src[i].octahedron_encode();
-					int16_t vector[2] = {
-						(int16_t)CLAMP(res.x * 65535, 0, 65535),
-						(int16_t)CLAMP(res.y * 65535, 0, 65535),
+					uint16_t vector[2] = {
+						(uint16_t)CLAMP(res.x * 65535, 0, 65535),
+						(uint16_t)CLAMP(res.y * 65535, 0, 65535),
 					};
 
 					memcpy(&vw[p_offsets[ai] + i * p_vertex_stride], vector, 4);
@@ -422,9 +422,9 @@ Error RenderingServer::_surface_set_data(Array p_arrays, uint32_t p_format, uint
 					for (int i = 0; i < p_vertex_array_len; i++) {
 						const Vector3 src(src_ptr[i * 4 + 0], src_ptr[i * 4 + 1], src_ptr[i * 4 + 2]);
 						Vector2 res = src.octahedron_tangent_encode(src_ptr[i * 4 + 3]);
-						int16_t vector[2] = {
-							(int16_t)CLAMP(res.x * 65535, 0, 65535),
-							(int16_t)CLAMP(res.y * 65535, 0, 65535),
+						uint16_t vector[2] = {
+							(uint16_t)CLAMP(res.x * 65535, 0, 65535),
+							(uint16_t)CLAMP(res.y * 65535, 0, 65535),
 						};
 
 						memcpy(&vw[p_offsets[ai] + i * p_vertex_stride], vector, 4);
@@ -437,9 +437,9 @@ Error RenderingServer::_surface_set_data(Array p_arrays, uint32_t p_format, uint
 					for (int i = 0; i < p_vertex_array_len; i++) {
 						const Vector3 src(src_ptr[i * 4 + 0], src_ptr[i * 4 + 1], src_ptr[i * 4 + 2]);
 						Vector2 res = src.octahedron_tangent_encode(src_ptr[i * 4 + 3]);
-						int16_t vector[2] = {
-							(int16_t)CLAMP(res.x * 65535, 0, 65535),
-							(int16_t)CLAMP(res.y * 65535, 0, 65535),
+						uint16_t vector[2] = {
+							(uint16_t)CLAMP(res.x * 65535, 0, 65535),
+							(uint16_t)CLAMP(res.y * 65535, 0, 65535),
 						};
 
 						memcpy(&vw[p_offsets[ai] + i * p_vertex_stride], vector, 4);
@@ -1697,7 +1697,10 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("texture_set_path", "texture", "path"), &RenderingServer::texture_set_path);
 	ClassDB::bind_method(D_METHOD("texture_get_path", "texture"), &RenderingServer::texture_get_path);
 
+	ClassDB::bind_method(D_METHOD("texture_get_format", "texture"), &RenderingServer::texture_get_format);
+
 	ClassDB::bind_method(D_METHOD("texture_set_force_redraw_if_visible", "texture", "enable"), &RenderingServer::texture_set_force_redraw_if_visible);
+	ClassDB::bind_method(D_METHOD("texture_rd_create", "rd_texture", "layer_type"), &RenderingServer::texture_rd_create, DEFVAL(RenderingServer::TEXTURE_LAYERED_2D_ARRAY));
 	ClassDB::bind_method(D_METHOD("texture_get_rd_texture", "texture", "srgb"), &RenderingServer::texture_get_rd_texture, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("texture_get_native_handle", "texture", "srgb"), &RenderingServer::texture_get_native_handle, DEFVAL(false));
 
@@ -1933,6 +1936,7 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(LIGHT_PARAM_SHADOW_OPACITY);
 	BIND_ENUM_CONSTANT(LIGHT_PARAM_SHADOW_BLUR);
 	BIND_ENUM_CONSTANT(LIGHT_PARAM_TRANSMITTANCE_BIAS);
+	BIND_ENUM_CONSTANT(LIGHT_PARAM_INTENSITY);
 	BIND_ENUM_CONSTANT(LIGHT_PARAM_MAX);
 
 	BIND_ENUM_CONSTANT(LIGHT_BAKE_DISABLED);
@@ -2807,6 +2811,8 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("force_draw", "swap_buffers", "frame_step"), &RenderingServer::draw, DEFVAL(true), DEFVAL(0.0));
 	ClassDB::bind_method(D_METHOD("get_rendering_device"), &RenderingServer::get_rendering_device);
 	ClassDB::bind_method(D_METHOD("create_local_rendering_device"), &RenderingServer::create_local_rendering_device);
+
+	ClassDB::bind_method(D_METHOD("call_on_render_thread", "callable"), &RenderingServer::call_on_render_thread);
 }
 
 void RenderingServer::mesh_add_surface_from_mesh_data(RID p_mesh, const Geometry3D::MeshData &p_mesh_data) {
